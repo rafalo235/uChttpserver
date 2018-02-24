@@ -43,6 +43,18 @@ typedef enum HttpStatusCode
   HTTP_STATUS_NOT_FOUND = 404
 } tHttpStatusCode;
 
+typedef enum HttpMethod
+{
+  HTTP_GET = 0,
+  HTTP_POST,
+  HTTP_OPTIONS,
+  HTTP_HEAD,
+  HTTP_PUT,
+  HTTP_DELETE,
+  HTTP_TRACE,
+  HTTP_CONNECT
+} tHttpMethod;
+
 typedef struct StringWithLength
 {
   const char *str;
@@ -57,11 +69,18 @@ typedef struct ResourceEntry
   tResourceCallback callback;
 } tResourceEntry;
 
+typedef struct uCHttpServerState
+{
+  unsigned char currentMethod;
+
+} tuCHttpServerState;
+
 /**
  * \brief Entry point for input stream processing
  */
 void
-Http_Input(const char * data, unsigned int length);
+Http_Input(tuCHttpServerState * const sm,
+	   const char * data, unsigned int length);
 
 /**
  * \brief Search for pattern in given input stream

@@ -29,10 +29,14 @@
 
 #include "uchttpserver.h"
 
-typedef unsigned int (*tParserState)(const char * data, unsigned int length);
+typedef unsigned int (*tParserState)(tuCHttpServerState * const,
+    const char * data, unsigned int length);
 
 /* Parse request states declarations */
-static unsigned int ParseMethodState(const char * data, unsigned int length);
+static unsigned int ParseMethodState(tuCHttpServerState * const sm,
+				     const char * data, unsigned int length);
+static unsigned int ParseResourceState(tuCHttpServerState * const sm,
+				       const char * data, unsigned int length);
 
 tStringWithLength methods[] =
     {
@@ -48,16 +52,25 @@ tStringWithLength methods[] =
 
 static tParserState sState = ParseMethodState;
 
-void Http_Input(const char * data, unsigned int length)
+void Http_Input(tuCHttpServerState * const sm,
+		const char * data, unsigned int length)
 {
-  sState(data, length);
+  unsigned int parsed;
+  while (length)
+    {
+      parsed = sState(sm, data, length);
+      length -= parsed;
+      data += parsed;
+    }
 }
 
 /* Parse request states definitions */
-static unsigned int ParseMethodState(const char * data, unsigned int length)
+static unsigned int ParseMethodState(tuCHttpServerState * const sm,
+				     const char * data, unsigned int length)
 {
   static const char *found = NULL;
   static unsigned int tofoundlen = 0U;
+  static unsigned char foundidx;
   unsigned int i;
   unsigned int size = sizeof(methods)/sizeof(methods[0]);
   unsigned int parsed = 0;
@@ -72,14 +85,19 @@ static unsigned int ParseMethodState(const char * data, unsigned int length)
 	{
 	  /* Match! */
 	  parsed += tofoundlen;
+	  sm->currentMethod = foundidx;
+	  sState = &ParseResourceState;
+	  length = 0;
 	}
       else if (counted == length)
 	{
+	  parsed += length;
 	  /* Stream shorter than pattern,
 	   * continue searching on next input */
 	  found += length;
 	  tofoundlen -= length;
-	  parsed += length;
+
+	  length = 0;
 	}
       else
 	{
@@ -102,14 +120,20 @@ static unsigned int ParseMethodState(const char * data, unsigned int length)
 	    {
 	      /* Match! */
 	      parsed += methods[i].length;
+	      sm->currentMethod = i; /* tHttpMethod */
+	      sState = &ParseResourceState;
+	      length = 0;
 	      break;
 	    }
 	  else if (counted == length)
 	    {
+	      parsed += length;
+
 	      /* To be continued */
 	      /* FIXME stream ends with 'P' */
 	      found = methods[i].str + length;
 	      tofoundlen = methods[i].length - length;
+	      foundidx = i;
 
 	      /* Exit outer loop */
 	      length = 0;
@@ -117,5 +141,14 @@ static unsigned int ParseMethodState(const char * data, unsigned int length)
 	    }
 	}
     }
+  return parsed;
+}
+
+
+static unsigned int ParseResourceState(tuCHttpServerState * const sm,
+				       const char * data, unsigned int length)
+{
+  unsigned int parsed = 0;
+
   return parsed;
 }
