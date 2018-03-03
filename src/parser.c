@@ -29,14 +29,19 @@
 
 #include "uchttpserver.h"
 
-typedef unsigned int (*tParserState)(tuCHttpServerState * const,
-    const char * data, unsigned int length);
-
 /* Parse request states declarations */
-static unsigned int ParseMethodState(tuCHttpServerState * const sm,
-				     const char * data, unsigned int length);
-static unsigned int ParseResourceState(tuCHttpServerState * const sm,
-				       const char * data, unsigned int length);
+static unsigned int ParseMethodState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int PostMethodState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int DetectUriState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int ParseAbsPathResourceState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int CallResourceState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int ParseResourceState(
+    void * const sm, const char * data, unsigned int length);
 
 tStringWithLength methods[] =
     {
@@ -50,7 +55,15 @@ tStringWithLength methods[] =
 	 STRING_WITH_LENGTH("CONNECT")
     };
 
-static tParserState sState = ParseMethodState;
+void
+Http_InitializeConnection(tuCHttpServerState * const sm,
+			  const tResourceEntry (*resources)[],
+			  unsigned int reslen)
+{
+  sm->state = &ParseMethodState;
+  sm->resources = resources;
+  sm->resourcesLength = reslen;
+}
 
 void Http_Input(tuCHttpServerState * const sm,
 		const char * data, unsigned int length)
@@ -58,19 +71,20 @@ void Http_Input(tuCHttpServerState * const sm,
   unsigned int parsed;
   while (length)
     {
-      parsed = sState(sm, data, length);
+      parsed = sm->state(sm, data, length);
       length -= parsed;
       data += parsed;
     }
 }
 
 /* Parse request states definitions */
-static unsigned int ParseMethodState(tuCHttpServerState * const sm,
-				     const char * data, unsigned int length)
+static unsigned int ParseMethodState(
+    void * const conn, const char * data, unsigned int length)
 {
   static const char *found = NULL;
   static unsigned int tofoundlen = 0U;
   static unsigned char foundidx;
+  tuCHttpServerState * const sm = conn;
   unsigned int i;
   unsigned int size = sizeof(methods)/sizeof(methods[0]);
   unsigned int parsed = 0;
@@ -86,7 +100,7 @@ static unsigned int ParseMethodState(tuCHttpServerState * const sm,
 	  /* Match! */
 	  parsed += tofoundlen;
 	  sm->currentMethod = foundidx;
-	  sState = &ParseResourceState;
+	  sm->state = &PostMethodState;
 	  length = 0;
 	}
       else if (counted == length)
@@ -121,7 +135,7 @@ static unsigned int ParseMethodState(tuCHttpServerState * const sm,
 	      /* Match! */
 	      parsed += methods[i].length;
 	      sm->currentMethod = i; /* tHttpMethod */
-	      sState = &ParseResourceState;
+	      sm->state = &PostMethodState;
 	      length = 0;
 	      break;
 	    }
@@ -145,9 +159,130 @@ static unsigned int ParseMethodState(tuCHttpServerState * const sm,
 }
 
 
-static unsigned int ParseResourceState(tuCHttpServerState * const sm,
-				       const char * data, unsigned int length)
+static unsigned int PostMethodState(
+    void * const conn, const char * data, unsigned int length)
 {
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+  if (length)
+    {
+      if (' ' == *data)
+	{
+	  parsed = 1;
+	  sm->state = &DetectUriState;
+	}
+      else
+	{
+	  /* Error - expected SP */
+	}
+    }
+  return parsed;
+}
+
+static unsigned int DetectUriState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  if (length)
+    {
+      if ('/' == *data)
+	{
+	  /* Most common - abs_path */
+	  sm->state = &ParseAbsPathResourceState;
+	  sm->resourceIdx = 0; /* TODO ??? */
+	  sm->compareIdx = 0;
+	  sm->left = 0;
+	  sm->right = sm->resourcesLength - 1;
+	}
+      else if ('*' == *data)
+	{
+	  /* Server request */
+
+	}
+      else
+	{
+	  /* Host ?proxy? */
+
+	}
+    }
+
+  return 0;
+}
+
+static unsigned int ParseAbsPathResourceState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+
+  while (length)
+    {
+      const tResourceEntry *res;
+      const char * toCheck; //fixme exceed len
+
+      sm->resourceIdx = ((sm->right - sm->left) >> 1) + sm->left;
+      res = &((*sm->resources)[sm->resourceIdx]);
+      toCheck = res->name.str + sm->compareIdx; //fixme exceed len
+
+      if ('\0' == *toCheck &&
+	  (' ' == *data || '?' == *data))
+	{
+	  /* Match! */
+	  sm->state = &CallResourceState;
+	  length = 0;
+	}
+      else
+	{
+	  int res = Utils_Compare(data, toCheck);
+	  if (0 == res)
+	    {
+	      /* Match for now */
+	      ++toCheck;
+	      ++(sm->compareIdx);
+	      --length;
+	      ++data;
+	      ++parsed;
+	    }
+	  else
+	    {
+	      if (sm->left == sm->right)
+		{
+		  /* Not found! */
+		}
+	      else
+		{
+		  /* Another resource need to be checked */
+		  if (0 < res)
+		    {
+		      sm->left = sm->resourceIdx + 1;
+		    }
+		  else /* if (0 > res) */
+		    {
+		      sm->right = sm->resourceIdx - 1;
+		    }
+		}
+	    }
+	}
+    }
+
+  return parsed;
+}
+
+static unsigned int CallResourceState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+
+  (*sm->resources)[sm->resourceIdx].callback(conn);
+  /* End of parsing request */
+  sm->state = &ParseMethodState;
+  return 0;
+}
+
+static unsigned int ParseResourceState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
   unsigned int parsed = 0;
 
   return parsed;

@@ -1,5 +1,5 @@
 /*
- utils.c
+ resources-template.h
 
  MIT License
 
@@ -23,53 +23,15 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
 
-  Created on: Feb 23, 2018
+  Created on: Feb 28, 2018
       Author: Rafał Olejniczak
- */
+*/
+
+#ifndef RESOURCES_TEMPLATE_H_
+#define RESOURCES_TEMPLATE_H_
 
 #include "uchttpserver.h"
 
-unsigned int
-Utils_SearchPattern(
-    const char *pattern, const char *stream,
-    unsigned int patternlen, unsigned int streamlen)
-{
-  unsigned int ret = 0;
-  while ((patternlen--) && (streamlen--))
-    {
-      if (*pattern == *stream)
-	{
-	  ++ret;
-	}
-      else
-	{
-	  break;
-	}
-    }
-  return ret;
-}
+extern const tResourceEntry resources[];
 
-void
-Utils_BinarySearch(void * const conn, const char *data,
-     unsigned int length)
-{
-}
-
-int
-Utils_Compare(const char * a, const char * b)
-{
-  int result;
-  if (*a > *b)
-    {
-      result = 1;
-    }
-  else if (*a < *b)
-    {
-      result = -1;
-    }
-  else
-    {
-      result = 0;
-    }
-  return result;
-}
+#endif /* RESOURCES_TEMPLATE_H_ */

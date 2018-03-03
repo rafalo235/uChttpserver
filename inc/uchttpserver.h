@@ -61,19 +61,40 @@ typedef struct StringWithLength
   unsigned int length;
 } tStringWithLength;
 
-typedef tHttpStatusCode (*tResourceCallback)(void);
+typedef tHttpStatusCode (*tResourceCallback)(const void * const);
+
+typedef unsigned int (*tParserState)(void * const,
+    const char * data, unsigned int length);
+typedef int (*tCompareFunction)(
+    const void * a, const void * b, unsigned int length);
 
 typedef struct ResourceEntry
 {
-  const char *name;
+  tStringWithLength name;
   tResourceCallback callback;
 } tResourceEntry;
 
 typedef struct uCHttpServerState
 {
   unsigned char currentMethod;
-
+  unsigned char compareIdx; /* resource path limit */
+  unsigned int resourceIdx;
+  unsigned int left;
+  unsigned int right;
+  tParserState state;
+  const tResourceEntry (*resources)[]; /* Or set as singleton */
+  unsigned int resourcesLength;
 } tuCHttpServerState;
+
+/**
+ * \brief Initialize connection state machine
+ * Must be called once per connection before any
+ * processing
+ */
+void
+Http_InitializeConnection(tuCHttpServerState * const sm,
+			  const tResourceEntry (*resources)[],
+			  unsigned int reslen);
 
 /**
  * \brief Entry point for input stream processing
@@ -89,5 +110,8 @@ unsigned int
 Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
+
+int
+Utils_Compare(const char * a, const char * b);
 
 #endif /* UCHTTPSERVER_H_ */
