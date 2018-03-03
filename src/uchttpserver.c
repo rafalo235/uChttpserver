@@ -1,5 +1,5 @@
 /*
- parser.c
+ uchttpserver.c
 
  MIT License
 
@@ -27,9 +27,21 @@
       Author: Rafał Olejniczak
  */
 
+/*****************************************************************************/
+/* Includes                                                                  */
+/*****************************************************************************/
+
 #include "uchttpserver.h"
 
-/* Parse request states declarations */
+/*****************************************************************************/
+/* Defines                                                                   */
+/*****************************************************************************/
+
+
+/*****************************************************************************/
+/* Connection states (declarations)                                          */
+/*****************************************************************************/
+
 static unsigned int ParseMethodState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int PostMethodState(
@@ -40,8 +52,19 @@ static unsigned int ParseAbsPathResourceState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int CallResourceState(
     void * const sm, const char * data, unsigned int length);
-static unsigned int ParseResourceState(
-    void * const sm, const char * data, unsigned int length);
+
+/*****************************************************************************/
+/* Local functions (declarations)                                            */
+/*****************************************************************************/
+
+static unsigned int Utils_SearchPattern(
+    const char *pattern, const char *stream,
+    unsigned int pattenlen, unsigned int streamlen);
+static int Utils_Compare(const char * a, const char * b);
+
+/*****************************************************************************/
+/* Local variables and constants                                             */
+/*****************************************************************************/
 
 tStringWithLength methods[] =
     {
@@ -54,6 +77,10 @@ tStringWithLength methods[] =
 	 STRING_WITH_LENGTH("TRACE"),
 	 STRING_WITH_LENGTH("CONNECT")
     };
+
+/*****************************************************************************/
+/* Global connection functions                                               */
+/*****************************************************************************/
 
 void
 Http_InitializeConnection(tuCHttpServerState * const sm,
@@ -76,6 +103,14 @@ void Http_Input(tuCHttpServerState * const sm,
       data += parsed;
     }
 }
+
+/*****************************************************************************/
+/* Global helper functions                                                   */
+/*****************************************************************************/
+
+/*****************************************************************************/
+/* Connection states (definitions)                                           */
+/*****************************************************************************/
 
 /* Parse request states definitions */
 static unsigned int ParseMethodState(
@@ -129,7 +164,8 @@ static unsigned int ParseMethodState(
       for (i = 0; i < size; ++i)
 	{
 	  unsigned int counted =
-	      Utils_SearchPattern(methods[i].str, data, methods[i].length, length);
+	      Utils_SearchPattern(methods[i].str,
+                  data, methods[i].length, length);
 	  if (counted == methods[i].length)
 	    {
 	      /* Match! */
@@ -189,7 +225,6 @@ static unsigned int DetectUriState(
 	{
 	  /* Most common - abs_path */
 	  sm->state = &ParseAbsPathResourceState;
-	  sm->resourceIdx = 0; /* TODO ??? */
 	  sm->compareIdx = 0;
 	  sm->left = 0;
 	  sm->right = sm->resourcesLength - 1;
@@ -279,11 +314,43 @@ static unsigned int CallResourceState(
   return 0;
 }
 
-static unsigned int ParseResourceState(
-    void * const conn, const char * data, unsigned int length)
-{
-  tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+/*****************************************************************************/
+/* Local functions (definitions)                                             */
+/*****************************************************************************/
 
-  return parsed;
+static unsigned int Utils_SearchPattern(
+    const char *pattern, const char *stream,
+    unsigned int patternlen, unsigned int streamlen)
+{
+  unsigned int ret = 0;
+  while ((patternlen--) && (streamlen--))
+    {
+      if (*pattern == *stream)
+	{
+	  ++ret;
+	}
+      else
+	{
+	  break;
+	}
+    }
+  return ret;
+}
+
+static int Utils_Compare(const char * a, const char * b)
+{
+  int result;
+  if (*a > *b)
+    {
+      result = 1;
+    }
+  else if (*a < *b)
+    {
+      result = -1;
+    }
+  else
+    {
+      result = 0;
+    }
+  return result;
 }

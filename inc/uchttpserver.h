@@ -103,15 +103,4 @@ void
 Http_Input(tuCHttpServerState * const sm,
 	   const char * data, unsigned int length);
 
-/**
- * \brief Search for pattern in given input stream
- */
-unsigned int
-Utils_SearchPattern(
-    const char *pattern, const char *stream,
-    unsigned int pattenlen, unsigned int streamlen);
-
-int
-Utils_Compare(const char * a, const char * b);
-
 #endif /* UCHTTPSERVER_H_ */
