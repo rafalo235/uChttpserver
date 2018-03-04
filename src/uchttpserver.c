@@ -50,6 +50,8 @@ static unsigned int DetectUriState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
     void * const sm, const char * data, unsigned int length);
+static unsigned int ParseParameters(
+    void * const sm, const char * data, unsigned int length);
 static unsigned int CallResourceState(
     void * const sm, const char * data, unsigned int length);
 
@@ -65,6 +67,8 @@ static int Utils_Compare(const char * a, const char * b);
 /*****************************************************************************/
 /* Local variables and constants                                             */
 /*****************************************************************************/
+
+const char CRLF[] = "\r\n";
 
 tStringWithLength methods[] =
     {
@@ -263,7 +267,8 @@ static unsigned int ParseAbsPathResourceState(
 	  (' ' == *data || '?' == *data))
 	{
 	  /* Match! */
-	  sm->state = &CallResourceState;
+	  sm->byte = 0;
+	  sm->state = &ParseParameters;
 	  length = 0;
 	}
       else
@@ -298,6 +303,41 @@ static unsigned int ParseAbsPathResourceState(
 		}
 	    }
 	}
+    }
+
+  return parsed;
+}
+
+static unsigned int ParseParameters(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+  unsigned char *step = &(sm->byte);
+
+  /* TODO parsing version parameters and passing them
+   * to callback */
+  while (length)
+    {
+      if ((0 == (*step) || 2 == (*step)) && CRLF[0] == (*data))
+	{
+	  ++(*step);
+	}
+      else if (1 == (*step) && CRLF[1] == (*data))
+	{
+	  ++(*step);
+	}
+      else if (3 == (*step) && CRLF[1] == (*data))
+	{
+	  sm->state = &CallResourceState;
+	}
+      else
+	{
+	  *step = 0;
+	}
+      --length;
+      ++data;
+      ++parsed;
     }
 
   return parsed;
