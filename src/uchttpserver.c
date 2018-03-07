@@ -63,14 +63,22 @@ static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
 static int Utils_Compare(const char * a, const char * b);
+static void
+Http_SendPortWrapper(
+    void * const conn, const char * data, unsigned int length);
+static void
+Http_SendNullTerminatedPortWrapper(
+    void * const conn, const char * data);
 
 /*****************************************************************************/
 /* Local variables and constants                                             */
 /*****************************************************************************/
 
+/* ?todo with length */
+const char SP[] = " ";
 const char CRLF[] = "\r\n";
 
-tStringWithLength methods[] =
+const tStringWithLength methods[] =
     {
 	 STRING_WITH_LENGTH("GET"), /* Most commonly used */
 	 STRING_WITH_LENGTH("POST"),
@@ -80,6 +88,12 @@ tStringWithLength methods[] =
 	 STRING_WITH_LENGTH("DELETE"),
 	 STRING_WITH_LENGTH("TRACE"),
 	 STRING_WITH_LENGTH("CONNECT")
+    };
+const char * statuscodes[][2] =
+    {
+	{ "200", "OK" },
+	{ "100", "Continue" },
+	{ "404", "Not Found" }
     };
 
 /*****************************************************************************/
@@ -112,6 +126,41 @@ void Http_Input(tuCHttpServerState * const sm,
 /* Global helper functions                                                   */
 /*****************************************************************************/
 
+tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm)
+{
+  return (tHttpMethod)sm->method;
+}
+
+void Http_HelperSendStatusLine(
+    tuCHttpServerState * const sm, tHttpStatusCode code)
+{
+  Http_SendNullTerminatedPortWrapper(sm, "HTTP/1.1 ");
+  Http_SendNullTerminatedPortWrapper(sm, statuscodes[code][0]);
+  Http_SendNullTerminatedPortWrapper(sm, SP);
+  Http_SendNullTerminatedPortWrapper(sm, statuscodes[code][1]);
+  Http_SendNullTerminatedPortWrapper(sm, CRLF);
+}
+
+void Http_HelperSendHeaderLine(
+    tuCHttpServerState * const sm, const char * name, const char * value)
+{
+  Http_SendNullTerminatedPortWrapper(sm, name);
+  Http_SendNullTerminatedPortWrapper(sm, ": ");
+  Http_SendNullTerminatedPortWrapper(sm, value);
+  Http_SendNullTerminatedPortWrapper(sm, CRLF);
+}
+
+void Http_HelperSendCRLF(tuCHttpServerState * const sm)
+{
+  Http_SendNullTerminatedPortWrapper(sm, CRLF);
+}
+
+void Http_HelperSendMessageBody(
+    tuCHttpServerState * const sm, const char * body)
+{
+  Http_SendNullTerminatedPortWrapper(sm, body);
+}
+
 /*****************************************************************************/
 /* Connection states (definitions)                                           */
 /*****************************************************************************/
@@ -138,7 +187,7 @@ static unsigned int ParseMethodState(
 	{
 	  /* Match! */
 	  parsed += tofoundlen;
-	  sm->currentMethod = foundidx;
+	  sm->method = foundidx;
 	  sm->state = &PostMethodState;
 	  length = 0;
 	}
@@ -174,7 +223,7 @@ static unsigned int ParseMethodState(
 	    {
 	      /* Match! */
 	      parsed += methods[i].length;
-	      sm->currentMethod = i; /* tHttpMethod */
+	      sm->method = i; /* tHttpMethod */
 	      sm->state = &PostMethodState;
 	      length = 0;
 	      break;
@@ -393,4 +442,22 @@ static int Utils_Compare(const char * a, const char * b)
       result = 0;
     }
   return result;
+}
+
+static void
+Http_SendPortWrapper(
+    void * const conn, const char * data, unsigned int length)
+{
+  Http_SendPort(data, length);
+}
+
+static void
+Http_SendNullTerminatedPortWrapper(
+    void * const conn, const char * data)
+{
+  while ('\0' != (*data))
+    {
+      Http_SendPort(data, 1);
+      ++data;
+    }
 }

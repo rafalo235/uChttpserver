@@ -38,9 +38,9 @@
 
 typedef enum HttpStatusCode
 {
-  HTTP_STATUS_CONTINUE = 100,
-  HTTP_STATUS_OK = 200,
-  HTTP_STATUS_NOT_FOUND = 404
+  HTTP_STATUS_OK,
+  HTTP_STATUS_CONTINUE,
+  HTTP_STATUS_NOT_FOUND
 } tHttpStatusCode;
 
 typedef enum HttpMethod
@@ -76,7 +76,7 @@ typedef struct ResourceEntry
 
 typedef struct uCHttpServerState
 {
-  unsigned char currentMethod;
+  unsigned char method;
   unsigned char compareIdx; /* resource path limit */
   unsigned char byte;
   unsigned int resourceIdx;
@@ -86,6 +86,10 @@ typedef struct uCHttpServerState
   const tResourceEntry (*resources)[]; /* Or set as singleton */
   unsigned int resourcesLength;
 } tuCHttpServerState;
+
+/* TODO configurable port name */
+void
+Http_SendPort(const char * data, unsigned int length);
 
 /**
  * \brief Initialize connection state machine
@@ -103,5 +107,14 @@ Http_InitializeConnection(tuCHttpServerState * const sm,
 void
 Http_Input(tuCHttpServerState * const sm,
 	   const char * data, unsigned int length);
+
+tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm);
+void Http_HelperSendStatusLine(
+    tuCHttpServerState * const sm, tHttpStatusCode code);
+void Http_HelperSendHeaderLine(
+    tuCHttpServerState * const sm, const char * name, const char * value);
+void Http_HelperSendCRLF(tuCHttpServerState * const sm);
+void Http_HelperSendMessageBody(
+    tuCHttpServerState * const sm, const char * body);
 
 #endif /* UCHTTPSERVER_H_ */

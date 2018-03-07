@@ -75,6 +75,22 @@ static tHttpStatusCode FaviconCallback(const void * const a)
 
 static tHttpStatusCode IndexCallback(const void * const a)
 {
+  /* FIXME connection struct */
+  Http_HelperSendStatusLine(NULL, HTTP_STATUS_OK);
+  Http_HelperSendHeaderLine(NULL, "Content-Type", "text/html");
+  Http_HelperSendHeaderLine(NULL, "Connection", "close");
+  Http_HelperSendCRLF(NULL);
+  Http_HelperSendMessageBody(NULL,
+    "<html>"
+    "<head>"
+    "<meta http-equiv=\"Refresh\" content=\"1\" />"
+    "</head>"
+    "<body>"
+    "<h1>Welcome to uCHttpServer!</h1>"
+    "Hello world from uCHttpServer!"
+    "</body>"
+    "</html>");
+
   return HTTP_STATUS_OK;
 }
 
