@@ -75,6 +75,9 @@ static tHttpStatusCode FaviconCallback(const void * const a)
 
 static tHttpStatusCode IndexCallback(const void * const a)
 {
+  const char * helloWorld = "Hello world";
+  const void * const * parameters = { (const void *)&helloWorld };
+
   /* FIXME connection struct */
   Http_HelperSendStatusLine(NULL, HTTP_STATUS_OK);
   Http_HelperSendHeaderLine(NULL, "Content-Type", "text/html");
@@ -87,9 +90,9 @@ static tHttpStatusCode IndexCallback(const void * const a)
     "</head>"
     "<body>"
     "<h1>Welcome to uCHttpServer!</h1>"
-    "Hello world from uCHttpServer!"
+    "%s from uCHttpServer!"
     "</body>"
-    "</html>", NULL);
+    "</html>", parameters);
 
   return HTTP_STATUS_OK;
 }

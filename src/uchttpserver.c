@@ -170,13 +170,14 @@ void Http_HelperSendMessageBody(
 }
 
 void Http_HelperSendMessageBodyParametered(
-    tuCHttpServerState * const sm, const char * body, const void *param)
+    tuCHttpServerState * const sm,
+    const char * body, const void * const * param)
 {
   while ('\0' != (*body))
     {
       if (ESCAPE_CHARACTER == (*body))
 	{
-	  Utils_PrintParameter(sm, body, param);
+	  Utils_PrintParameter(sm, body, *param);
 	  body += 2;
 	  ++param;
 	}
