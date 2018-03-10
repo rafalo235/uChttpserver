@@ -80,7 +80,7 @@ static tHttpStatusCode IndexCallback(const void * const a)
   Http_HelperSendHeaderLine(NULL, "Content-Type", "text/html");
   Http_HelperSendHeaderLine(NULL, "Connection", "close");
   Http_HelperSendCRLF(NULL);
-  Http_HelperSendMessageBody(NULL,
+  Http_HelperSendMessageBodyParametered(NULL,
     "<html>"
     "<head>"
     "<meta http-equiv=\"Refresh\" content=\"1\" />"
@@ -89,7 +89,7 @@ static tHttpStatusCode IndexCallback(const void * const a)
     "<h1>Welcome to uCHttpServer!</h1>"
     "Hello world from uCHttpServer!"
     "</body>"
-    "</html>");
+    "</html>", NULL);
 
   return HTTP_STATUS_OK;
 }

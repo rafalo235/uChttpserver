@@ -62,12 +62,19 @@ static unsigned int CallResourceState(
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
+
 static int Utils_Compare(const char * a, const char * b);
-static void
-Http_SendPortWrapper(
+
+static void Utils_PrintParameter(
+    void * const conn, const char * format, const void * param);
+
+static void Utils_PrintString(
+    void * const conn, const char * value);
+
+static void Http_SendPortWrapper(
     void * const conn, const char * data, unsigned int length);
-static void
-Http_SendNullTerminatedPortWrapper(
+
+static void Http_SendNullTerminatedPortWrapper(
     void * const conn, const char * data);
 
 /*****************************************************************************/
@@ -77,6 +84,7 @@ Http_SendNullTerminatedPortWrapper(
 /* ?todo with length */
 const char SP[] = " ";
 const char CRLF[] = "\r\n";
+const char const ESCAPE_CHARACTER = '%';
 
 const tStringWithLength methods[] =
     {
@@ -159,6 +167,25 @@ void Http_HelperSendMessageBody(
     tuCHttpServerState * const sm, const char * body)
 {
   Http_SendNullTerminatedPortWrapper(sm, body);
+}
+
+void Http_HelperSendMessageBodyParametered(
+    tuCHttpServerState * const sm, const char * body, const void *param)
+{
+  while ('\0' != (*body))
+    {
+      if (ESCAPE_CHARACTER == (*body))
+	{
+	  Utils_PrintParameter(sm, body, param);
+	  body += 2;
+	  ++param;
+	}
+      else
+	{
+	  Http_SendPortWrapper(sm, body, 1);
+	  ++body;
+	}
+    }
 }
 
 /*****************************************************************************/
@@ -368,6 +395,8 @@ static unsigned int ParseParameters(
    * to callback */
   while (length)
     {
+      ++parsed;
+      --length;
       if ((0 == (*step) || 2 == (*step)) && CRLF[0] == (*data))
 	{
 	  ++(*step);
@@ -378,15 +407,14 @@ static unsigned int ParseParameters(
 	}
       else if (3 == (*step) && CRLF[1] == (*data))
 	{
+	  length = 0;
 	  sm->state = &CallResourceState;
 	}
       else
 	{
 	  *step = 0;
 	}
-      --length;
       ++data;
-      ++parsed;
     }
 
   return parsed;
@@ -442,6 +470,25 @@ static int Utils_Compare(const char * a, const char * b)
       result = 0;
     }
   return result;
+}
+
+static void Utils_PrintParameter(
+    void * const conn, const char * format, const void * param)
+{
+  if ('s' == format[1])
+    {
+      Utils_PrintString(conn, param);
+    }
+  else if (ESCAPE_CHARACTER == format[1])
+    {
+      Http_SendPortWrapper(conn, &ESCAPE_CHARACTER, 1);
+    }
+}
+
+static void Utils_PrintString(
+    void * const conn, const char * value)
+{
+  Http_SendNullTerminatedPortWrapper(conn, value);
 }
 
 static void

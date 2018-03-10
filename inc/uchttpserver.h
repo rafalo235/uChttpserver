@@ -109,12 +109,19 @@ Http_Input(tuCHttpServerState * const sm,
 	   const char * data, unsigned int length);
 
 tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm);
+
 void Http_HelperSendStatusLine(
     tuCHttpServerState * const sm, tHttpStatusCode code);
+
 void Http_HelperSendHeaderLine(
     tuCHttpServerState * const sm, const char * name, const char * value);
+
 void Http_HelperSendCRLF(tuCHttpServerState * const sm);
+
 void Http_HelperSendMessageBody(
     tuCHttpServerState * const sm, const char * body);
+
+void Http_HelperSendMessageBodyParametered(
+    tuCHttpServerState * const sm, const char * body, const void *param);
 
 #endif /* UCHTTPSERVER_H_ */
