@@ -33,16 +33,16 @@
 /* Resource callbacks                                                        */
 /* - of course it could be global, it's up to your needs                     */
 /*****************************************************************************/
-static tHttpStatusCode AaaCallback(const void *const);
-static tHttpStatusCode AbaCallback(const void *const);
-static tHttpStatusCode AbbCallback(const void *const);
-static tHttpStatusCode AbcCallback(const void *const);
-static tHttpStatusCode BbbCallback(const void *const);
-static tHttpStatusCode CbbCallback(const void *const);
-static tHttpStatusCode CccCallback(const void *const);
-static tHttpStatusCode CeeeCallback(const void *const);
-static tHttpStatusCode FaviconCallback(const void * const);
-static tHttpStatusCode IndexCallback(const void * const);
+static tHttpStatusCode AaaCallback(void *const);
+static tHttpStatusCode AbaCallback(void *const);
+static tHttpStatusCode AbbCallback(void *const);
+static tHttpStatusCode AbcCallback(void *const);
+static tHttpStatusCode BbbCallback(void *const);
+static tHttpStatusCode CbbCallback(void *const);
+static tHttpStatusCode CccCallback(void *const);
+static tHttpStatusCode CeeeCallback(void *const);
+static tHttpStatusCode FaviconCallback(void * const);
+static tHttpStatusCode IndexCallback(void * const);
 
 /*****************************************************************************/
 /* Resources table                                                           */
@@ -68,12 +68,12 @@ const tResourceEntry resources[] =
 /* - use helper functions to prepare response, buffering is limited because  */
 /*   of microcontroller environment usually suffers lack of memory           */
 /*****************************************************************************/
-static tHttpStatusCode FaviconCallback(const void * const a)
+static tHttpStatusCode FaviconCallback(void * const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode IndexCallback(const void * const a)
+static tHttpStatusCode IndexCallback(void * const a)
 {
   const char * helloWorld = "Hello world";
   const void * const * parameters = { (const void *)&helloWorld };
@@ -93,46 +93,47 @@ static tHttpStatusCode IndexCallback(const void * const a)
     "%s from uCHttpServer!"
     "</body>"
     "</html>", parameters);
+  Http_HelperFlush(&connection);
 
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AaaCallback(const void *const a)
+static tHttpStatusCode AaaCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AbaCallback(const void *const a)
+static tHttpStatusCode AbaCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AbbCallback(const void *const a)
+static tHttpStatusCode AbbCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AbcCallback(const void *const a)
+static tHttpStatusCode AbcCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode BbbCallback(const void *const a)
+static tHttpStatusCode BbbCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode CbbCallback(const void *const a)
+static tHttpStatusCode CbbCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode CccCallback(const void *const a)
+static tHttpStatusCode CccCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode CeeeCallback(const void *const a)
+static tHttpStatusCode CeeeCallback(void *const a)
 {
   return HTTP_STATUS_OK;
 }

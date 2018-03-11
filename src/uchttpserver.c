@@ -126,7 +126,7 @@ void Http_Input(tuCHttpServerState * const sm,
 		const char * data, unsigned int length)
 {
   unsigned int parsed;
-  while (length)
+  while (length || (&CallResourceState == sm->state))
     {
       parsed = sm->state(sm, data, length);
       length -= parsed;
@@ -195,6 +195,15 @@ void Http_HelperSendMessageBodyParametered(
 	  Http_SendPortWrapper(sm, body, 1);
 	  ++body;
 	}
+    }
+}
+
+void Http_HelperFlush(tuCHttpServerState * const sm)
+{
+  if (0 != sm->bufferIdx)
+    {
+      sm->send(sm, sm->buffer, sm->bufferIdx);
+      sm->bufferIdx = 0;
     }
 }
 
@@ -300,6 +309,7 @@ static unsigned int PostMethodState(
       else
 	{
 	  /* Error - expected SP */
+	  sm->state = &ParseMethodState;
 	}
     }
   return parsed;
@@ -322,12 +332,13 @@ static unsigned int DetectUriState(
       else if ('*' == *data)
 	{
 	  /* Server request */
+	  sm->state = &ParseMethodState;
 
 	}
       else
 	{
 	  /* Host ?proxy? */
-
+	  sm->state = &ParseMethodState;
 	}
     }
 
@@ -374,6 +385,7 @@ static unsigned int ParseAbsPathResourceState(
 	      if (sm->left == sm->right)
 		{
 		  /* Not found! */
+		  sm->state = &ParseMethodState;
 		}
 	      else
 		{
@@ -506,7 +518,22 @@ Http_SendPortWrapper(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  sm->send(conn, data, length);
+
+  while (length)
+    {
+      if (sm->bufferIdx < HTTP_BUFFER_LENGTH)
+	{
+	  sm->buffer[sm->bufferIdx] = *data;
+	  ++data;
+	  --length;
+	  ++(sm->bufferIdx);
+	}
+      else
+	{
+	  sm->send(conn, sm->buffer, HTTP_BUFFER_LENGTH);
+	  sm->bufferIdx = 0;
+	}
+    }
 }
 
 static void
@@ -516,7 +543,7 @@ Http_SendNullTerminatedPortWrapper(
   tuCHttpServerState * const sm = conn;
   while ('\0' != (*data))
     {
-      sm->send(conn, data, 1);
+      Http_SendPortWrapper(conn, data, 1);
       ++data;
     }
 }

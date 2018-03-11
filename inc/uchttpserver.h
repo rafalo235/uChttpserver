@@ -34,6 +34,10 @@
 #define NULL ((void*)0)
 #endif
 
+#ifndef HTTP_BUFFER_LENGTH
+#define HTTP_BUFFER_LENGTH (256)
+#endif
+
 #define STRING_WITH_LENGTH(x) {x, sizeof(x) - 1}
 
 typedef enum HttpStatusCode
@@ -61,7 +65,7 @@ typedef struct StringWithLength
   unsigned int length;
 } tStringWithLength;
 
-typedef tHttpStatusCode (*tResourceCallback)(const void * const);
+typedef tHttpStatusCode (*tResourceCallback)(void * const);
 typedef unsigned int (*tSendCallback)(
     void * const conn, const char * data, unsigned int length);
 
@@ -89,6 +93,8 @@ typedef struct uCHttpServerState
   unsigned int resourcesLength;
   tSendCallback send;
   void * context;
+  unsigned int bufferIdx;
+  char buffer[HTTP_BUFFER_LENGTH];
 } tuCHttpServerState;
 
 /**
@@ -128,5 +134,7 @@ void Http_HelperSendMessageBody(
 void Http_HelperSendMessageBodyParametered(
     tuCHttpServerState * const sm,
     const char * body, const void * const * param);
+
+void Http_HelperFlush(tuCHttpServerState * const sm);
 
 #endif /* UCHTTPSERVER_H_ */
