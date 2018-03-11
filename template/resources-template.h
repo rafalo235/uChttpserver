@@ -32,6 +32,8 @@
 
 #include "uchttpserver.h"
 
+extern tuCHttpServerState connection;
+
 extern const tResourceEntry resources[];
 
 #endif /* RESOURCES_TEMPLATE_H_ */

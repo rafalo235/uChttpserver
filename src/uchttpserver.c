@@ -110,10 +110,12 @@ const char * statuscodes[][2] =
 
 void
 Http_InitializeConnection(tuCHttpServerState * const sm,
+			  tSendCallback send,
 			  const tResourceEntry (*resources)[],
 			  unsigned int reslen)
 {
   sm->state = &ParseMethodState;
+  sm->send = send;
   sm->resources = resources;
   sm->resourcesLength = reslen;
 }
@@ -496,16 +498,18 @@ static void
 Http_SendPortWrapper(
     void * const conn, const char * data, unsigned int length)
 {
-  Http_SendPort(data, length);
+  tuCHttpServerState * const sm = conn;
+  sm->send(conn, data, length);
 }
 
 static void
 Http_SendNullTerminatedPortWrapper(
     void * const conn, const char * data)
 {
+  tuCHttpServerState * const sm = conn;
   while ('\0' != (*data))
     {
-      Http_SendPort(data, 1);
+      sm->send(conn, data, 1);
       ++data;
     }
 }

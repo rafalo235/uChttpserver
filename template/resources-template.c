@@ -79,11 +79,11 @@ static tHttpStatusCode IndexCallback(const void * const a)
   const void * const * parameters = { (const void *)&helloWorld };
 
   /* FIXME connection struct */
-  Http_HelperSendStatusLine(NULL, HTTP_STATUS_OK);
-  Http_HelperSendHeaderLine(NULL, "Content-Type", "text/html");
-  Http_HelperSendHeaderLine(NULL, "Connection", "close");
-  Http_HelperSendCRLF(NULL);
-  Http_HelperSendMessageBodyParametered(NULL,
+  Http_HelperSendStatusLine(&connection, HTTP_STATUS_OK);
+  Http_HelperSendHeaderLine(&connection, "Content-Type", "text/html");
+  Http_HelperSendHeaderLine(&connection, "Connection", "close");
+  Http_HelperSendCRLF(&connection);
+  Http_HelperSendMessageBodyParametered(&connection,
     "<html>"
     "<head>"
     "<meta http-equiv=\"Refresh\" content=\"1\" />"

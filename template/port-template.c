@@ -30,9 +30,10 @@
 #include "uchttpserver.h"
 #include <stdio.h>
 
-void
-Http_SendPort(const char * data, unsigned int length)
+unsigned int Http_SendPort(
+    void * const  conn, const char * data, unsigned int length)
 {
   fwrite(data, 1, length, stdout);
   fflush(stdout);
+  return length;
 }

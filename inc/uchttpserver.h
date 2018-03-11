@@ -62,6 +62,8 @@ typedef struct StringWithLength
 } tStringWithLength;
 
 typedef tHttpStatusCode (*tResourceCallback)(const void * const);
+typedef unsigned int (*tSendCallback)(
+    void * const conn, const char * data, unsigned int length);
 
 typedef unsigned int (*tParserState)(void * const,
     const char * data, unsigned int length);
@@ -85,11 +87,8 @@ typedef struct uCHttpServerState
   tParserState state;
   const tResourceEntry (*resources)[]; /* Or set as singleton */
   unsigned int resourcesLength;
+  tSendCallback send;
 } tuCHttpServerState;
-
-/* TODO configurable port name */
-void
-Http_SendPort(const char * data, unsigned int length);
 
 /**
  * \brief Initialize connection state machine
@@ -98,6 +97,7 @@ Http_SendPort(const char * data, unsigned int length);
  */
 void
 Http_InitializeConnection(tuCHttpServerState * const sm,
+			  tSendCallback send,
 			  const tResourceEntry (*resources)[],
 			  unsigned int reslen);
 
