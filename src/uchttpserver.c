@@ -112,12 +112,14 @@ void
 Http_InitializeConnection(tuCHttpServerState * const sm,
 			  tSendCallback send,
 			  const tResourceEntry (*resources)[],
-			  unsigned int reslen)
+			  unsigned int reslen,
+			  void * context)
 {
   sm->state = &ParseMethodState;
   sm->send = send;
   sm->resources = resources;
   sm->resourcesLength = reslen;
+  sm->context = context;
 }
 
 void Http_Input(tuCHttpServerState * const sm,
@@ -139,6 +141,11 @@ void Http_Input(tuCHttpServerState * const sm,
 tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm)
 {
   return (tHttpMethod)sm->method;
+}
+
+void * Http_HelperGetContext(tuCHttpServerState * const sm)
+{
+  return sm->context;
 }
 
 void Http_HelperSendStatusLine(

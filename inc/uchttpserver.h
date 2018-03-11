@@ -88,6 +88,7 @@ typedef struct uCHttpServerState
   const tResourceEntry (*resources)[]; /* Or set as singleton */
   unsigned int resourcesLength;
   tSendCallback send;
+  void * context;
 } tuCHttpServerState;
 
 /**
@@ -99,7 +100,8 @@ void
 Http_InitializeConnection(tuCHttpServerState * const sm,
 			  tSendCallback send,
 			  const tResourceEntry (*resources)[],
-			  unsigned int reslen);
+			  unsigned int reslen,
+			  void * context);
 
 /**
  * \brief Entry point for input stream processing
@@ -109,6 +111,8 @@ Http_Input(tuCHttpServerState * const sm,
 	   const char * data, unsigned int length);
 
 tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm);
+
+void * Http_HelperGetContext(tuCHttpServerState * const sm);
 
 void Http_HelperSendStatusLine(
     tuCHttpServerState * const sm, tHttpStatusCode code);
