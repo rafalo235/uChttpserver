@@ -42,6 +42,7 @@
 /* Connection states (declarations)                                          */
 /*****************************************************************************/
 
+/* Request line                                                              */
 static unsigned int ParseMethodState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int PostMethodState(
@@ -50,7 +51,17 @@ static unsigned int DetectUriState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
     void * const sm, const char * data, unsigned int length);
-static unsigned int ParseParameters(
+static unsigned int ParseHttpVersion(
+    void * const sm, const char * data, unsigned int length);
+
+/* Parse request header parameters                                           */
+/* - used <left> integer paramter array index                                */
+/* - used <right> integer parameter - parameter buffer index                 */
+static unsigned int CheckHeaderEndState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int ParseParameterNameState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int ParseParameterValueState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int CallResourceState(
     void * const sm, const char * data, unsigned int length);
@@ -365,7 +376,11 @@ static unsigned int ParseAbsPathResourceState(
 	{
 	  /* Match! */
 	  sm->byte = 0;
-	  sm->state = &ParseParameters;
+	  /* fixme parse get parameters */
+	  sm->compareIdx = 0;
+	  sm->left = 0;
+	  sm->right = 0;
+	  sm->state = &ParseHttpVersion;
 	  length = 0;
 	}
       else
@@ -406,37 +421,140 @@ static unsigned int ParseAbsPathResourceState(
   return parsed;
 }
 
-static unsigned int ParseParameters(
+static unsigned int ParseHttpVersion(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed = 0;
-  unsigned char *step = &(sm->byte);
 
-  /* TODO parsing version parameters and passing them
-   * to callback */
-  while (length)
+  if (2 == sm->compareIdx)
     {
-      ++parsed;
-      --length;
-      if ((0 == (*step) || 2 == (*step)) && CRLF[0] == (*data))
+      sm->compareIdx = 0;
+      sm->state = &CheckHeaderEndState;
+      parsed = 0;
+    }
+  else if (CRLF[sm->compareIdx] == *data)
+    {
+      ++(sm->compareIdx);
+      parsed = 1;
+    }
+  else
+    {
+      parsed = 1;
+    }
+
+  return parsed;
+}
+
+static unsigned int CheckHeaderEndState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+  if (2 == sm->compareIdx)
+    {
+      sm->state = &CallResourceState;
+      parsed = 0;
+    }
+  else if (CRLF[sm->compareIdx] == *data)
+    {
+      ++(sm->compareIdx);
+      parsed = 1;
+    }
+  else
+    {
+      unsigned int * paramIdx = &(sm->left);
+      unsigned int * bufferIdx = &(sm->right);
+
+      /* Parse error */
+      sm->state = &ParseParameterNameState;
+
+      /* Add next parameter name to pointer list */
+      if (*paramIdx < HTTP_PARAMETERS_MAX)
 	{
-	  ++(*step);
+	  sm->parameters[*paramIdx][0] =
+	      &(sm->parametersBuffer[*bufferIdx]);
 	}
-      else if (1 == (*step) && CRLF[1] == (*data))
+      parsed = 0;
+    }
+
+  return parsed;
+}
+
+static unsigned int ParseParameterNameState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+  unsigned int * bufferIdx = &(sm->right);
+
+  if (HTTP_PARAMETERS_BUFFER_LENGTH == *bufferIdx)
+    {
+      /* Parameters will be truncated */
+      parsed = 1;
+    }
+  if (':' == *data)
+    {
+      unsigned int * paramIdx = &(sm->left);
+
+      /* Set next state */
+      sm->state = &ParseParameterValueState;
+
+      /* Add buffer sperator (null character) */
+      sm->parametersBuffer[*bufferIdx] = '\0';
+      ++(*bufferIdx);
+
+      /* Add next parameter to pointer list */
+      if (*paramIdx < HTTP_PARAMETERS_MAX)
 	{
-	  ++(*step);
+	  /* FIXME marking paramter outside buffer */
+	  sm->parameters[*paramIdx][1] =
+	      &(sm->parametersBuffer[*bufferIdx]);
+	  ++(*paramIdx);
 	}
-      else if (3 == (*step) && CRLF[1] == (*data))
-	{
-	  length = 0;
-	  sm->state = &CallResourceState;
-	}
-      else
-	{
-	  *step = 0;
-	}
-      ++data;
+      parsed = 1;
+    }
+  else
+    {
+      sm->parametersBuffer[*bufferIdx] = *data;
+      ++(*bufferIdx);
+      parsed = 1;
+    }
+  return parsed;
+}
+
+static unsigned int ParseParameterValueState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int * bufferIdx = &(sm->right);
+  unsigned int parsed = 0;
+
+  if (2 == sm->compareIdx)
+    {
+      sm->compareIdx = 0;
+      sm->state = &CheckHeaderEndState;
+    }
+  else if (*data == CRLF[sm->compareIdx])
+    {
+      ++(sm->compareIdx);
+      parsed = 1;
+    }
+  else if (' ' == *data || '\t' == *data)
+    {
+      /* Ignore Linear White Space */
+      parsed = 1;
+    }
+  else if (HTTP_PARAMETERS_BUFFER_LENGTH == *bufferIdx)
+    {
+      /* Parameters will be truncated */
+      parsed = 1;
+    }
+  else
+    {
+      sm->parametersBuffer[*bufferIdx] = *data;
+      ++(*bufferIdx);
+      parsed = 1;
     }
 
   return parsed;

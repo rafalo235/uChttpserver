@@ -38,6 +38,14 @@
 #define HTTP_BUFFER_LENGTH (256)
 #endif
 
+#ifndef HTTP_PARAMETERS_BUFFER_LENGTH
+#define HTTP_PARAMETERS_BUFFER_LENGTH (128)
+#endif
+
+#ifndef HTTP_PARAMETERS_MAX
+#define HTTP_PARAMETERS_MAX (16)
+#endif
+
 #define STRING_WITH_LENGTH(x) {x, sizeof(x) - 1}
 
 typedef enum HttpStatusCode
@@ -95,6 +103,8 @@ typedef struct uCHttpServerState
   void * context;
   unsigned int bufferIdx;
   char buffer[HTTP_BUFFER_LENGTH];
+  char parametersBuffer[HTTP_PARAMETERS_BUFFER_LENGTH];
+  char * parameters[HTTP_PARAMETERS_MAX][2];
 } tuCHttpServerState;
 
 /**
