@@ -51,6 +51,10 @@ static unsigned int DetectUriState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
     void * const sm, const char * data, unsigned int length);
+static unsigned int ParseUrlEncodedFormName(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int ParseUrlEncodedFormValue(
+    void * const sm, const char * data, unsigned int length);
 static unsigned int ParseHttpVersion(
     void * const sm, const char * data, unsigned int length);
 
@@ -73,6 +77,12 @@ static unsigned int CallResourceState(
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
+
+static void Utils_AddParameterName(void * const conn);
+
+static void Utils_AddParameterValue(void * const conn);
+
+static void Utils_AddParameterCharacter(void * const conn, char ch);
 
 static int Utils_Compare(const char * a, const char * b);
 
@@ -371,8 +381,7 @@ static unsigned int ParseAbsPathResourceState(
       res = &((*sm->resources)[sm->resourceIdx]);
       toCheck = res->name.str + sm->compareIdx; //fixme exceed len
 
-      if ('\0' == *toCheck &&
-	  (' ' == *data || '?' == *data))
+      if ('\0' == *toCheck)
 	{
 	  /* Match! */
 	  sm->byte = 0;
@@ -380,8 +389,19 @@ static unsigned int ParseAbsPathResourceState(
 	  sm->compareIdx = 0;
 	  sm->left = 0;
 	  sm->right = 0;
-	  sm->state = &ParseHttpVersion;
 	  length = 0;
+	  ++parsed;
+
+	  if (' ' == *data)
+	    {
+	      sm->state = &ParseHttpVersion;
+
+	    }
+	  else if ('?' == *data)
+	    {
+	      sm->state = &ParseUrlEncodedFormName;
+	      Utils_AddParameterName(conn);
+	    }
 	}
       else
 	{
@@ -416,6 +436,62 @@ static unsigned int ParseAbsPathResourceState(
 		}
 	    }
 	}
+    }
+
+  return parsed;
+}
+
+static unsigned int ParseUrlEncodedFormName(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+
+  if ('=' == *data)
+    {
+      sm->state = &ParseUrlEncodedFormValue;
+      Utils_AddParameterCharacter(conn, '\0');
+      Utils_AddParameterValue(conn);
+      parsed = 1;
+    }
+  else if (' ' == *data)
+    {
+      sm->state = &ParseHttpVersion;
+      Utils_AddParameterCharacter(conn, '\0');
+      parsed = 1;
+    }
+  else
+    {
+      Utils_AddParameterCharacter(conn, *data);
+      parsed = 1;
+    }
+
+  return parsed;
+}
+
+static unsigned int ParseUrlEncodedFormValue(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+
+  if ('&' == *data)
+    {
+      sm->state = &ParseUrlEncodedFormName;
+      Utils_AddParameterCharacter(conn, '\0');
+      Utils_AddParameterName(conn);
+      parsed = 1;
+    }
+  else if (' ' == *data)
+    {
+      sm->state = &ParseHttpVersion;
+      Utils_AddParameterCharacter(conn, '\0');
+      parsed = 1;
+    }
+  else
+    {
+      Utils_AddParameterCharacter(conn, *data);
+      parsed = 1;
     }
 
   return parsed;
@@ -463,18 +539,9 @@ static unsigned int CheckHeaderEndState(
     }
   else
     {
-      unsigned int * paramIdx = &(sm->left);
-      unsigned int * bufferIdx = &(sm->right);
-
-      /* Parse error */
       sm->state = &ParseParameterNameState;
+      Utils_AddParameterName(conn);
 
-      /* Add next parameter name to pointer list */
-      if (*paramIdx < HTTP_PARAMETERS_MAX)
-	{
-	  sm->parameters[*paramIdx][0] =
-	      &(sm->parametersBuffer[*bufferIdx]);
-	}
       parsed = 0;
     }
 
@@ -486,38 +553,19 @@ static unsigned int ParseParameterNameState(
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed = 0;
-  unsigned int * bufferIdx = &(sm->right);
 
-  if (HTTP_PARAMETERS_BUFFER_LENGTH == *bufferIdx)
-    {
-      /* Parameters will be truncated */
-      parsed = 1;
-    }
   if (':' == *data)
     {
-      unsigned int * paramIdx = &(sm->left);
-
       /* Set next state */
       sm->state = &ParseParameterValueState;
+      Utils_AddParameterCharacter(conn, '\0');
+      Utils_AddParameterValue(conn);
 
-      /* Add buffer sperator (null character) */
-      sm->parametersBuffer[*bufferIdx] = '\0';
-      ++(*bufferIdx);
-
-      /* Add next parameter to pointer list */
-      if (*paramIdx < HTTP_PARAMETERS_MAX)
-	{
-	  /* FIXME marking paramter outside buffer */
-	  sm->parameters[*paramIdx][1] =
-	      &(sm->parametersBuffer[*bufferIdx]);
-	  ++(*paramIdx);
-	}
       parsed = 1;
     }
   else
     {
-      sm->parametersBuffer[*bufferIdx] = *data;
-      ++(*bufferIdx);
+      Utils_AddParameterCharacter(conn, *data);
       parsed = 1;
     }
   return parsed;
@@ -532,6 +580,7 @@ static unsigned int ParseParameterValueState(
 
   if (2 == sm->compareIdx)
     {
+      Utils_AddParameterCharacter(conn, '\0');
       sm->compareIdx = 0;
       sm->state = &CheckHeaderEndState;
     }
@@ -545,15 +594,9 @@ static unsigned int ParseParameterValueState(
       /* Ignore Linear White Space */
       parsed = 1;
     }
-  else if (HTTP_PARAMETERS_BUFFER_LENGTH == *bufferIdx)
-    {
-      /* Parameters will be truncated */
-      parsed = 1;
-    }
   else
     {
-      sm->parametersBuffer[*bufferIdx] = *data;
-      ++(*bufferIdx);
+      Utils_AddParameterCharacter(conn, *data);
       parsed = 1;
     }
 
@@ -592,6 +635,48 @@ static unsigned int Utils_SearchPattern(
 	}
     }
   return ret;
+}
+
+static void Utils_AddParameterName(void * const conn)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int * paramIdx = &(sm->left);
+  unsigned int * bufferIdx = &(sm->right);
+
+  if (*paramIdx <= HTTP_PARAMETERS_MAX)
+    {
+      sm->parameters[*paramIdx][0] = &(sm->parametersBuffer[*bufferIdx]);
+    }
+}
+
+static void Utils_AddParameterValue(void * const conn)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int * paramIdx = &(sm->left);
+  unsigned int * bufferIdx = &(sm->right);
+
+  if (*paramIdx < HTTP_PARAMETERS_MAX)
+    {
+      sm->parameters[*paramIdx][1] = &(sm->parametersBuffer[*bufferIdx]);
+      ++(*paramIdx);
+    }
+}
+
+static void Utils_AddParameterCharacter(void * const conn, char ch)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int * bufferIdx = &(sm->right);
+
+  if (*bufferIdx < (HTTP_PARAMETERS_BUFFER_LENGTH - 1))
+    {
+      sm->parametersBuffer[*bufferIdx] = ch;
+      ++(*bufferIdx);
+    }
+  else if (*bufferIdx == (HTTP_PARAMETERS_BUFFER_LENGTH - 1) &&
+      sm->parametersBuffer[*bufferIdx])
+    {
+      sm->parametersBuffer[*bufferIdx] = '\0';
+    }
 }
 
 static int Utils_Compare(const char * a, const char * b)
