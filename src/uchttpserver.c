@@ -219,6 +219,34 @@ void Http_HelperSendMessageBodyParametered(
     }
 }
 
+void Http_HelperSend(
+    tuCHttpServerState * const sm, const char * data, unsigned int length)
+{
+  Http_SendPortWrapper(sm, data, length);
+}
+
+void Http_HelperSendParametered(
+    tuCHttpServerState * const sm, const char * data, unsigned int length,
+    const void * const * param)
+{
+  while (length--)
+    {
+      if (ESCAPE_CHARACTER == (*data))
+	{
+	  Utils_PrintParameter(sm, data, *param);
+	  data += 2;
+	  --length; /* extra character */
+	  ++param;
+	}
+      else
+	{
+	  Http_SendPortWrapper(sm, data, 1);
+	  ++data;
+	}
+    }
+
+}
+
 void Http_HelperFlush(tuCHttpServerState * const sm)
 {
   if (0 != sm->bufferIdx)

@@ -145,6 +145,13 @@ void Http_HelperSendMessageBodyParametered(
     tuCHttpServerState * const sm,
     const char * body, const void * const * param);
 
+void Http_HelperSend(
+    tuCHttpServerState * const sm, const char * data, unsigned int length);
+
+void Http_HelperSendParametered(
+    tuCHttpServerState * const sm, const char * data, unsigned int length,
+    const void * const * param);
+
 void Http_HelperFlush(tuCHttpServerState * const sm);
 
 #endif /* UCHTTPSERVER_H_ */
