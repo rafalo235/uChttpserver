@@ -147,7 +147,9 @@ void Http_Input(tuCHttpServerState * const sm,
 		const char * data, unsigned int length)
 {
   unsigned int parsed;
-  while (length || (&CallResourceState == sm->state))
+  while (length ||
+      (&CallResourceState == sm->state) ||
+      (&CheckHeaderEndState == sm->state))
     {
       parsed = sm->state(sm, data, length);
       length -= parsed;
