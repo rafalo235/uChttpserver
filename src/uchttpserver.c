@@ -78,6 +78,9 @@ static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
 
+static unsigned int Utils_SearchNullTerminatedPattern(
+    const char * pattern, const char * input);
+
 static void Utils_AddParameterName(void * const conn);
 
 static void Utils_AddParameterValue(void * const conn);
@@ -122,7 +125,8 @@ const char * statuscodes[][2] =
     {
 	{ "200", "OK" },
 	{ "100", "Continue" },
-	{ "404", "Not Found" }
+	{ "404", "Not Found" },
+	{ "500", "Server fault" }
     };
 
 /*****************************************************************************/
@@ -256,6 +260,28 @@ void Http_HelperFlush(tuCHttpServerState * const sm)
       sm->send(sm, sm->buffer, sm->bufferIdx);
       sm->bufferIdx = 0;
     }
+}
+
+const char * Http_HelperGetParameter(
+    tuCHttpServerState * const sm, const char * param)
+{
+  unsigned int i;
+  const char * result = NULL;
+
+  for (i = 0; i < HTTP_PARAMETERS_MAX; i++)
+    {
+      if (NULL == sm->parameters[i][0])
+	{
+	  break;
+	}
+      else if (0 == Utils_SearchNullTerminatedPattern(param, sm->parameters[i][0]))
+	{
+	  result = sm->parameters[i][1];
+	  break;
+	}
+    }
+
+  return result;
 }
 
 /*****************************************************************************/
@@ -559,7 +585,7 @@ static unsigned int CheckHeaderEndState(
   unsigned int parsed = 0;
   if (2 == sm->compareIdx)
     {
-      sm->state = &CallResourceState;
+      sm->state = &AnalyzeEntityState;
       parsed = 0;
     }
   else if (CRLF[sm->compareIdx] == *data)
@@ -633,6 +659,27 @@ static unsigned int ParseParameterValueState(
   return parsed;
 }
 
+static unsigned int AnalyzeEntityState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  const char * content = Http_HelperGetParameter("Content-Type");
+
+  if (NULL == content)
+    {
+      sm->state = &CallResourceState;
+    }
+  else if (0 == Utils_SearchNullTerminatedPattern(
+      "application/x-www-form-urlencoded"))
+    {
+    }
+  else
+    {
+      sm->state = &CallResourceState;
+    }
+  return 0;
+}
+
 static unsigned int CallResourceState(
     void * const conn, const char * data, unsigned int length)
 {
@@ -663,6 +710,31 @@ static unsigned int Utils_SearchPattern(
 	{
 	  break;
 	}
+    }
+  return ret;
+}
+
+static unsigned int Utils_SearchNullTerminatedPattern(
+    const char * pattern, const char * input)
+{
+  unsigned int ret = 0;
+  while (*pattern)
+    {
+      if (*pattern == *input)
+	{
+	  ++pattern;
+	  ++input;
+	}
+      else
+	{
+	  ret = 1;
+	  break;
+	}
+    }
+  /* Check null termination */
+  if (*pattern != *input)
+    {
+      ret = 1;
     }
   return ret;
 }

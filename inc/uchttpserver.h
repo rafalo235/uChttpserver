@@ -52,7 +52,8 @@ typedef enum HttpStatusCode
 {
   HTTP_STATUS_OK,
   HTTP_STATUS_CONTINUE,
-  HTTP_STATUS_NOT_FOUND
+  HTTP_STATUS_NOT_FOUND,
+  HTTP_STATUS_SERVER_FAULT
 } tHttpStatusCode;
 
 typedef enum HttpMethod
