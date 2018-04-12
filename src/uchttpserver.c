@@ -81,6 +81,8 @@ static unsigned int Utils_SearchPattern(
 static unsigned int Utils_SearchNullTerminatedPattern(
     const char * pattern, const char * input);
 
+static int Utils_AtoiNullTerminated(const char * str);
+
 static void Utils_AddParameterName(void * const conn);
 
 static void Utils_AddParameterValue(void * const conn);
@@ -664,6 +666,7 @@ static unsigned int AnalyzeEntityState(
 {
   tuCHttpServerState * const sm = conn;
   const char * content = Http_HelperGetParameter("Content-Type");
+  const char * contentLength = Http_HelperGetParameter("Content-Length");
 
   if (NULL == content)
     {
@@ -672,6 +675,15 @@ static unsigned int AnalyzeEntityState(
   else if (0 == Utils_SearchNullTerminatedPattern(
       "application/x-www-form-urlencoded"))
     {
+      sm->state = &ParseUrlEncodedFormName;
+      if (NULL != contentLength)
+	{
+	  sm->contentLength = Utils_AtoiNullTerminated(contentLength);
+	}
+      else
+	{
+	  sm->contentLength = 0;
+	}
     }
   else
     {
@@ -737,6 +749,33 @@ static unsigned int Utils_SearchNullTerminatedPattern(
       ret = 1;
     }
   return ret;
+}
+
+static int Utils_AtoiNullTerminated(const char * str)
+{
+  int multiplier = 1;
+  int result = 0;
+
+  if (*str == '-')
+    {
+      multiplier = -1;
+      ++str;
+    }
+  while (*str)
+    {
+      if (('0' <= *str) && ('9' >= *str))
+	{
+	  result *= 10;
+	  result += ((int)*str) - ((int)'0');
+	}
+      else
+	{
+	  /* Exit on any other character */
+	  break;
+	}
+      ++str;
+    }
+  return result * multiplier;
 }
 
 static void Utils_AddParameterName(void * const conn)

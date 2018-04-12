@@ -97,6 +97,7 @@ typedef struct uCHttpServerState
   unsigned int resourceIdx;
   unsigned int left;
   unsigned int right;
+  unsigned int contentLength;
   tParserState state;
   const tResourceEntry (*resources)[]; /* Or set as singleton */
   unsigned int resourcesLength;
