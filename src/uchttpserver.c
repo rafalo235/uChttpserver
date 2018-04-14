@@ -161,7 +161,10 @@ void Http_Input(tuCHttpServerState * const sm,
   unsigned int parsed;
   while (length ||
       (&CallResourceState == sm->state) ||
-      (&CheckHeaderEndState == sm->state))
+      (&CheckHeaderEndState == sm->state) ||
+      (&AnalyzeEntityState == sm->state) ||
+      (&ParseUrlEncodedEntityName == sm->state) ||
+      (&ParseUrlEncodedEntityValue == sm->state))
     {
       parsed = sm->state(sm, data, length);
       length -= parsed;
