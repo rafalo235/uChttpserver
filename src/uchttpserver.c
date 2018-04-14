@@ -67,6 +67,12 @@ static unsigned int ParseParameterNameState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseParameterValueState(
     void * const sm, const char * data, unsigned int length);
+static unsigned int AnalyzeEntityState(
+    void * const conn, const char * data, unsigned int length);
+static unsigned int ParseUrlEncodedEntityName(
+    void * const conn, const char * data, unsigned int length);
+static unsigned int ParseUrlEncodedEntityValue(
+    void * const conn, const char * data, unsigned int length);
 static unsigned int CallResourceState(
     void * const sm, const char * data, unsigned int length);
 
@@ -665,17 +671,17 @@ static unsigned int AnalyzeEntityState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  const char * content = Http_HelperGetParameter("Content-Type");
-  const char * contentLength = Http_HelperGetParameter("Content-Length");
+  const char * content = Http_HelperGetParameter(sm, "Content-Type");
+  const char * contentLength = Http_HelperGetParameter(sm, "Content-Length");
 
   if (NULL == content)
     {
       sm->state = &CallResourceState;
     }
   else if (0 == Utils_SearchNullTerminatedPattern(
-      "application/x-www-form-urlencoded"))
+      "application/x-www-form-urlencoded", content))
     {
-      sm->state = &ParseUrlEncodedFormName;
+      sm->state = &ParseUrlEncodedEntityName;
       if (NULL != contentLength)
 	{
 	  sm->contentLength = Utils_AtoiNullTerminated(contentLength);
@@ -690,6 +696,66 @@ static unsigned int AnalyzeEntityState(
       sm->state = &CallResourceState;
     }
   return 0;
+}
+
+static unsigned int ParseUrlEncodedEntityName(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+
+  if (0U == sm->contentLength)
+    {
+      sm->state = &CallResourceState;
+      Utils_AddParameterCharacter(conn, '\0');
+      parsed = 0U;
+    }
+  else if ('=' == *data)
+    {
+      sm->state = &ParseUrlEncodedEntityValue;
+      Utils_AddParameterCharacter(conn, '\0');
+      Utils_AddParameterValue(conn);
+      sm->contentLength--;
+      parsed = 1;
+    }
+  else
+    {
+      Utils_AddParameterCharacter(conn, *data);
+      sm->contentLength--;
+      parsed = 1;
+    }
+
+  return parsed;
+}
+
+static unsigned int ParseUrlEncodedEntityValue(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 0;
+
+  if (0U == sm->contentLength)
+    {
+      sm->state = &CallResourceState;
+      Utils_AddParameterCharacter(conn, '\0');
+      parsed = 0U;
+    }
+  else if ('&' == *data)
+    {
+      sm->state = &ParseUrlEncodedFormName;
+      Utils_AddParameterCharacter(conn, '\0');
+      Utils_AddParameterName(conn);
+      sm->contentLength--;
+      parsed = 1;
+    }
+  else
+    {
+      Utils_AddParameterCharacter(conn, *data);
+      sm->contentLength--;
+      parsed = 1;
+    }
+
+  return parsed;
 }
 
 static unsigned int CallResourceState(
