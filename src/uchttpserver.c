@@ -690,6 +690,7 @@ static unsigned int AnalyzeEntityState(
 	{
 	  sm->contentLength = 0;
 	}
+      Utils_AddParameterName(conn);
     }
   else
     {
@@ -742,7 +743,7 @@ static unsigned int ParseUrlEncodedEntityValue(
     }
   else if ('&' == *data)
     {
-      sm->state = &ParseUrlEncodedFormName;
+      sm->state = &ParseUrlEncodedEntityName;
       Utils_AddParameterCharacter(conn, '\0');
       Utils_AddParameterName(conn);
       sm->contentLength--;
