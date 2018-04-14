@@ -132,6 +132,9 @@ tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm);
 
 void * Http_HelperGetContext(tuCHttpServerState * const sm);
 
+const char * Http_HelperGetParameter(
+    tuCHttpServerState * const sm, const char * param);
+
 void Http_HelperSendStatusLine(
     tuCHttpServerState * const sm, tHttpStatusCode code);
 

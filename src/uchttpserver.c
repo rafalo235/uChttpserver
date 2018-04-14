@@ -186,6 +186,28 @@ void * Http_HelperGetContext(tuCHttpServerState * const sm)
   return sm->context;
 }
 
+const char * Http_HelperGetParameter(
+    tuCHttpServerState * const sm, const char * param)
+{
+  unsigned int i;
+  const char * result = NULL;
+
+  for (i = 0; i < HTTP_PARAMETERS_MAX; i++)
+    {
+      if (NULL == sm->parameters[i][0])
+	{
+	  break;
+	}
+      else if (0 == Utils_SearchNullTerminatedPattern(param, sm->parameters[i][0]))
+	{
+	  result = sm->parameters[i][1];
+	  break;
+	}
+    }
+
+  return result;
+}
+
 void Http_HelperSendStatusLine(
     tuCHttpServerState * const sm, tHttpStatusCode code)
 {
@@ -271,28 +293,6 @@ void Http_HelperFlush(tuCHttpServerState * const sm)
       sm->send(sm, sm->buffer, sm->bufferIdx);
       sm->bufferIdx = 0;
     }
-}
-
-const char * Http_HelperGetParameter(
-    tuCHttpServerState * const sm, const char * param)
-{
-  unsigned int i;
-  const char * result = NULL;
-
-  for (i = 0; i < HTTP_PARAMETERS_MAX; i++)
-    {
-      if (NULL == sm->parameters[i][0])
-	{
-	  break;
-	}
-      else if (0 == Utils_SearchNullTerminatedPattern(param, sm->parameters[i][0]))
-	{
-	  result = sm->parameters[i][1];
-	  break;
-	}
-    }
-
-  return result;
 }
 
 /*****************************************************************************/
