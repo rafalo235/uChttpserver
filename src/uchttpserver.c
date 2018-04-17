@@ -84,6 +84,8 @@ static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
 
+static char Utils_ToLowerCase(char input);
+
 static unsigned int Utils_SearchNullTerminatedPattern(
     const char * pattern, const char * input);
 
@@ -796,13 +798,23 @@ static unsigned int Utils_SearchPattern(
   return ret;
 }
 
+static char Utils_ToLowerCase(char input)
+{
+  char result = input;
+  if ('A' <= input && 'Z' >= input)
+    {
+      result += 0x20;
+    }
+  return result;
+}
+
 static unsigned int Utils_SearchNullTerminatedPattern(
     const char * pattern, const char * input)
 {
   unsigned int ret = 0;
   while (*pattern)
     {
-      if (*pattern == *input)
+      if (Utils_ToLowerCase(*pattern) == Utils_ToLowerCase(*input))
 	{
 	  ++pattern;
 	  ++input;
