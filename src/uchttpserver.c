@@ -135,6 +135,7 @@ const char * statuscodes[][2] =
     {
 	{ "200", "OK" },
 	{ "100", "Continue" },
+	{ "400", "Bad Request"},
 	{ "404", "Not Found" },
 	{ "500", "Server fault" }
     };
