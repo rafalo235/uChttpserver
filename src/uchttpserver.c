@@ -39,6 +39,18 @@
 
 
 /*****************************************************************************/
+/* Type definitions                                                          */
+/*****************************************************************************/
+
+typedef enum SearchEngineResultTag
+{
+  SEARCH_ENGINE_FOUND,
+  SEARCH_ENGINE_ONGOING,
+  SEARCH_ENGINE_NOT_FOUND,
+  SEARCH_ENGINE_BUFFER_EXCEEDED
+} tSearchEngineResult;
+
+/*****************************************************************************/
 /* Connection states (declarations)                                          */
 /*****************************************************************************/
 
@@ -780,6 +792,125 @@ static unsigned int CallResourceState(
 /*****************************************************************************/
 /* Local functions (definitions)                                             */
 /*****************************************************************************/
+
+static void SearchEngine_Reset(void * const conn)
+{
+  tuCHttpServerState * const sm = conn;
+  sm->compareIdx = 0U;
+}
+
+static int SearchEngine_Finished(void * const conn)
+{
+  int result = 0;
+  tuCHttpServerState * const sm = conn;
+  if (sm->left == sm->right)
+    {
+      result = 1;
+    }
+  return result;
+}
+
+static int SearchEngine_Compare(char a, char b)
+{
+  int result;
+  if (a > b)
+    {
+      result = 1;
+    }
+  else if (a < b)
+    {
+      result = -1;
+    }
+  else
+    {
+      result = 0;
+    }
+  return result;
+}
+
+static int SearchEngine_CopyInput(void * const conn, char input)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int * bufferIdx = &(sm->inputIdx);
+  unsigned int result = 0;
+
+  if (*bufferIdx < HTTP_PARAMETERS_BUFFER_LENGTH)
+    {
+      sm->parametersBuffer[*bufferIdx] = input;
+      ++(*bufferIdx);
+      result = 1;
+    }
+
+  return result;
+}
+
+static tSearchEngineResult SearchEngine_Search(
+    void * const conn, const tStringWithLength * pattern, char input)
+{
+  tuCHttpServerState * const sm = conn;
+  tSearchEngineResult result = SEARCH_ENGINE_ONGOING;
+
+  if (1 != SearchEngine_CopyInput(conn, input))
+    {
+      result = SEARCH_ENGINE_BUFFER_EXCEEDED;
+    }
+  else
+    {
+      do
+	{
+	  const tStringWithLength * resWithLength =
+	      &(sm->resources[sm->resourceIdx].name);
+
+	  if (sm->compareIdx >= resWithLength->length)
+	    {
+	      if (1 == SearchEngine_Finished(conn))
+		{
+		  result = SEARCH_ENGINE_NOT_FOUND;
+		}
+	      else
+		{
+		  SearchEngine_Reset(conn);
+		}
+	    }
+	  else
+	    {
+	      const char * input = &(sm->parametersBuffer + sm->compareIdx);
+	      const char * resource = &(resWithLength->str + sm->compareIdx);
+	      int comparation = SearchEngine_Compare(*input, *resource);
+
+	      if (0 == comparation)
+		{
+		  ++(sm->compareIdx);
+
+		  if (resWithLength->length == sm->compareIdx)
+		    {
+		      result = SEARCH_ENGINE_FOUND;
+		    }
+		}
+	      else
+		{
+		  if (1 == SearchEngine_Finished(conn))
+		    {
+		      result = SEARCH_ENGINE_NOT_FOUND;
+		    }
+		  else if (0 < comparation)
+		    {
+		      sm->left = sm->resourceIdx + 1;
+		    }
+		  else if (0 > comparation)
+		    {
+		      sm->right = sm->resourceIdx - 1;
+		    }
+		}
+	    }
+	}
+      while (
+	  sm->compareIdx < sm->inputIdx &&  /* Process all available chars */
+	  SEARCH_ENGINE_ONGOING == result); /* Process not finished */
+    }
+
+  return result;
+}
 
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,

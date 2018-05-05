@@ -95,6 +95,7 @@ typedef struct uCHttpServerState
 {
   unsigned char method;
   unsigned char compareIdx; /* resource path limit */
+  unsigned char inputIdx;
   unsigned char byte;
   unsigned int resourceIdx;
   unsigned int left;
