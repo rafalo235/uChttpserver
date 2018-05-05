@@ -92,6 +92,13 @@ static unsigned int CallResourceState(
 /* Local functions (declarations)                                            */
 /*****************************************************************************/
 
+static void SearchEngine_Reset(void * const conn);
+static int SearchEngine_Finished(void * const conn);
+static int SearchEngine_Compare(char a, char b);
+static int SearchEngine_CopyInput(void * const conn, char input);
+static tSearchEngineResult SearchEngine_Search(
+    void * const conn, char input);
+
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
@@ -453,8 +460,38 @@ static unsigned int ParseAbsPathResourceState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
+  tSearchEngineResult result;
 
+  if (SEARCH_ENGINE_ONGOING ==
+      (result = SearchEngine_Search(conn, *data)))
+    {
+      parsed = 1;
+    }
+  else if (SEARCH_ENGINE_FOUND == result)
+    {
+      /* workaround */
+      //parsed = 1;
+      sm->byte = 0;
+      /* fixme parse get parameters */
+      sm->compareIdx = 0;
+      sm->left = 0;
+      sm->right = 0;
+      parsed = 2;
+      sm->state = &ParseHttpVersion;
+    }
+  else if (SEARCH_ENGINE_NOT_FOUND == result)
+    {
+      parsed = 1;
+      /* todo error callback */
+    }
+  else if (SEARCH_ENGINE_BUFFER_EXCEEDED == result)
+    {
+      parsed = 1;
+      /* todo error callback */
+    }
+
+#if 0
   while (length)
     {
       const tResourceEntry *res;
@@ -520,6 +557,7 @@ static unsigned int ParseAbsPathResourceState(
 	    }
 	}
     }
+#endif
 
   return parsed;
 }
@@ -831,7 +869,7 @@ static int SearchEngine_Compare(char a, char b)
 static int SearchEngine_CopyInput(void * const conn, char input)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int * bufferIdx = &(sm->inputIdx);
+  unsigned char * bufferIdx = &(sm->inputIdx);
   unsigned int result = 0;
 
   if (*bufferIdx < HTTP_PARAMETERS_BUFFER_LENGTH)
@@ -844,8 +882,9 @@ static int SearchEngine_CopyInput(void * const conn, char input)
   return result;
 }
 
+/* TODO search entity with array and getter functions */
 static tSearchEngineResult SearchEngine_Search(
-    void * const conn, const tStringWithLength * pattern, char input)
+    void * const conn, char input)
 {
   tuCHttpServerState * const sm = conn;
   tSearchEngineResult result = SEARCH_ENGINE_ONGOING;
@@ -858,8 +897,10 @@ static tSearchEngineResult SearchEngine_Search(
     {
       do
 	{
-	  const tStringWithLength * resWithLength =
-	      &(sm->resources[sm->resourceIdx].name);
+	  const tStringWithLength * resWithLength;
+
+	  sm->resourceIdx = ((sm->right - sm->left) >> 1) + sm->left;
+	  resWithLength = &(((*sm->resources)[sm->resourceIdx]).name);
 
 	  if (sm->compareIdx >= resWithLength->length)
 	    {
@@ -874,8 +915,8 @@ static tSearchEngineResult SearchEngine_Search(
 	    }
 	  else
 	    {
-	      const char * input = &(sm->parametersBuffer + sm->compareIdx);
-	      const char * resource = &(resWithLength->str + sm->compareIdx);
+	      const char * input = sm->parametersBuffer + sm->compareIdx;
+	      const char * resource = resWithLength->str + sm->compareIdx;
 	      int comparation = SearchEngine_Compare(*input, *resource);
 
 	      if (0 == comparation)
