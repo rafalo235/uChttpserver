@@ -50,6 +50,13 @@ typedef enum SearchEngineResultTag
   SEARCH_ENGINE_BUFFER_EXCEEDED
 } tSearchEngineResult;
 
+typedef enum CompareEngineResultTag
+{
+  COMPARE_ENGINE_MATCH,
+  COMPARE_ENGINE_ONGOING,
+  COMPARE_ENGINE_NOT_MATCH
+} tCompareEngineResult;
+
 /*****************************************************************************/
 /* Connection states (declarations)                                          */
 /*****************************************************************************/
@@ -99,6 +106,10 @@ static int SearchEngine_CopyInput(void * const conn, char input);
 static tSearchEngineResult SearchEngine_Search(
     void * const conn, char input);
 
+static void CompareEngine_Init(void * const conn);
+static tCompareEngineResult CompareEngine_Compare(
+    void * const conn, char input, const tStringWithLength * pattern);
+
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
     unsigned int pattenlen, unsigned int streamlen);
@@ -134,8 +145,9 @@ static void Http_SendNullTerminatedPortWrapper(
 /* Local variables and constants                                             */
 /*****************************************************************************/
 
-/* ?todo with length */
-const char SP[] = " ";
+const tStringWithLength SP = STRING_WITH_LENGTH(" ");
+const tStringWithLength QUESTION_MARK = STRING_WITH_LENGTH(" ");
+
 const char CRLF[] = "\r\n";
 const char const ESCAPE_CHARACTER = '%';
 
@@ -236,7 +248,7 @@ void Http_HelperSendStatusLine(
 {
   Http_SendNullTerminatedPortWrapper(sm, "HTTP/1.1 ");
   Http_SendNullTerminatedPortWrapper(sm, statuscodes[code][0]);
-  Http_SendNullTerminatedPortWrapper(sm, SP);
+  Http_SendPortWrapper(sm, SP.str, SP.length);
   Http_SendNullTerminatedPortWrapper(sm, statuscodes[code][1]);
   Http_SendNullTerminatedPortWrapper(sm, CRLF);
 }
@@ -491,73 +503,33 @@ static unsigned int ParseAbsPathResourceState(
       /* todo error callback */
     }
 
-#if 0
-  while (length)
+  return parsed;
+}
+
+static unsigned int ParseResourceEnding(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  unsigned int parsed = 1U;
+  tCompareEngineResult spaceResult =
+      CompareEngine_Compare(conn, *data, &SP);
+  tCompareEngineResult questionMarkResult =
+      CompareEngine_Compare(conn, *data, &QUESTION_MARK);
+
+  if (COMPARE_ENGINE_MATCH == spaceResult)
     {
-      const tResourceEntry *res;
-      const char * toCheck; //fixme exceed len
-
-      sm->resourceIdx = ((sm->right - sm->left) >> 1) + sm->left;
-      res = &((*sm->resources)[sm->resourceIdx]);
-      toCheck = res->name.str + sm->compareIdx; //fixme exceed len
-
-      if ('\0' == *toCheck)
-	{
-	  /* Match! */
-	  sm->byte = 0;
-	  /* fixme parse get parameters */
-	  sm->compareIdx = 0;
-	  sm->left = 0;
-	  sm->right = 0;
-	  length = 0;
-	  ++parsed;
-
-	  if (' ' == *data)
-	    {
-	      sm->state = &ParseHttpVersion;
-
-	    }
-	  else if ('?' == *data)
-	    {
-	      sm->state = &ParseUrlEncodedFormName;
-	      Utils_AddParameterName(conn);
-	    }
-	}
-      else
-	{
-	  int res = Utils_Compare(data, toCheck);
-	  if (0 == res)
-	    {
-	      /* Match for now */
-	      ++toCheck;
-	      ++(sm->compareIdx);
-	      --length;
-	      ++data;
-	      ++parsed;
-	    }
-	  else
-	    {
-	      if (sm->left == sm->right)
-		{
-		  /* Not found! */
-		  sm->state = &ParseMethodState;
-		}
-	      else
-		{
-		  /* Another resource need to be checked */
-		  if (0 < res)
-		    {
-		      sm->left = sm->resourceIdx + 1;
-		    }
-		  else /* if (0 > res) */
-		    {
-		      sm->right = sm->resourceIdx - 1;
-		    }
-		}
-	    }
-	}
+      sm->state = &ParseHttpVersion;
     }
-#endif
+  else if (COMPARE_ENGINE_MATCH == questionMarkResult)
+    {
+      sm->state = &ParseUrlEncodedFormName;
+    }
+  else if ((COMPARE_ENGINE_ONGOING != spaceResult) &&
+      (COMPARE_ENGINE_ONGOING != questionMarkResult))
+    {
+      /* todo bad request */
+      parsed = 0U;
+    }
 
   return parsed;
 }
@@ -948,6 +920,37 @@ static tSearchEngineResult SearchEngine_Search(
       while (
 	  sm->compareIdx < sm->inputIdx &&  /* Process all available chars */
 	  SEARCH_ENGINE_ONGOING == result); /* Process not finished */
+    }
+
+  return result;
+}
+
+static void CompareEngine_Init(void * const conn)
+{
+  tuCHttpServerState * const sm = conn;
+  sm->compareIdx = 0U;
+}
+
+static tCompareEngineResult CompareEngine_Compare(
+    void * const conn, char input, const tStringWithLength * pattern)
+{
+  tuCHttpServerState * const sm = conn;
+  tCompareEngineResult result;
+
+  if (pattern->str[sm->compareIdx] == input)
+    {
+      ++(sm->compareIdx);
+      result = COMPARE_ENGINE_ONGOING;
+
+      /* Check if all characters are processed */
+      if (pattern->length == sm->compareIdx)
+        {
+          result = COMPARE_ENGINE_MATCH;
+        }
+    }
+  else
+    {
+      result = COMPARE_ENGINE_NOT_MATCH;
     }
 
   return result;
