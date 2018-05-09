@@ -46,8 +46,6 @@
 #define HTTP_PARAMETERS_MAX (16)
 #endif
 
-#define STRING_WITH_LENGTH(x) {x, sizeof(x) - 1}
-
 typedef enum HttpStatusCode
 {
   HTTP_STATUS_OK,
@@ -70,26 +68,55 @@ typedef enum HttpMethod
   HTTP_CONNECT
 } tHttpMethod;
 
+/*****************************************************************************/
+/* Common                                                                    */
+/*****************************************************************************/
+
+#define STRING_WITH_LENGTH(x) {x, sizeof(x) - 1}
+
 typedef struct StringWithLength
 {
   const char *str;
   unsigned int length;
 } tStringWithLength;
 
-typedef tHttpStatusCode (*tResourceCallback)(void * const);
-typedef unsigned int (*tSendCallback)(
-    void * const conn, const char * data, unsigned int length);
+/*****************************************************************************/
+/* Resources                                                                 */
+/*****************************************************************************/
 
-typedef unsigned int (*tParserState)(void * const,
-    const char * data, unsigned int length);
-typedef int (*tCompareFunction)(
-    const void * a, const void * b, unsigned int length);
+typedef tHttpStatusCode (*tResourceCallback)(void * const);
 
 typedef struct ResourceEntry
 {
   tStringWithLength name;
   tResourceCallback callback;
 } tResourceEntry;
+
+/*****************************************************************************/
+/* Search entity                                                             */
+/*****************************************************************************/
+
+typedef const tStringWithLength * (*tGetElementByIdxCallback)(unsigned int);
+
+typedef struct SearchEntity
+{
+  const void * array;
+  unsigned int length;
+  unsigned int left;
+  unsigned int right;
+  tGetElementByIdxCallback getElementByIdx;
+  unsigned char compareIdx;
+} tSearchEntity;
+
+/*****************************************************************************/
+/* General inteface                                                          */
+/*****************************************************************************/
+
+typedef unsigned int (*tSendCallback)(
+    void * const conn, const char * data, unsigned int length);
+
+typedef unsigned int (*tParserState)(void * const,
+    const char * data, unsigned int length);
 
 typedef struct uCHttpServerState
 {
@@ -112,6 +139,10 @@ typedef struct uCHttpServerState
   char * parameters[HTTP_PARAMETERS_MAX][2];
 } tuCHttpServerState;
 
+/*****************************************************************************/
+/* Integration API                                                           */
+/*****************************************************************************/
+
 /**
  * \brief Initialize connection state machine
  * Must be called once per connection before any
@@ -130,6 +161,10 @@ Http_InitializeConnection(tuCHttpServerState * const sm,
 void
 Http_Input(tuCHttpServerState * const sm,
 	   const char * data, unsigned int length);
+
+/*****************************************************************************/
+/* Helper API                                                                */
+/*****************************************************************************/
 
 tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm);
 
