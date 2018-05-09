@@ -96,16 +96,20 @@ typedef struct ResourceEntry
 /* Search entity                                                             */
 /*****************************************************************************/
 
-typedef const tStringWithLength * (*tGetElementByIdxCallback)(unsigned int);
+typedef const tStringWithLength *
+    (*tGetElementByIdxCallback)(const void *, unsigned int);
 
 typedef struct SearchEntity
 {
   const void * array;
+  char * buffer;
   unsigned int length;
   unsigned int left;
   unsigned int right;
   tGetElementByIdxCallback getElementByIdx;
   unsigned char compareIdx;
+  unsigned char bufferIdx;
+  unsigned char bufferLength;
 } tSearchEntity;
 
 /*****************************************************************************/
@@ -118,8 +122,13 @@ typedef unsigned int (*tSendCallback)(
 typedef unsigned int (*tParserState)(void * const,
     const char * data, unsigned int length);
 
+typedef union SharedArea {
+  tSearchEntity searchEntity;
+} tSharedArea;
+
 typedef struct uCHttpServerState
 {
+  tSharedArea shared;
   unsigned char method;
   unsigned char compareIdx; /* resource path limit */
   unsigned char inputIdx;

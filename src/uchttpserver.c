@@ -68,6 +68,8 @@ static unsigned int PostMethodState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int DetectUriState(
     void * const sm, const char * data, unsigned int length);
+static unsigned int InitializeResourceSearchState(
+    void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseUrlEncodedFormName(
@@ -99,16 +101,22 @@ static unsigned int CallResourceState(
 /* Local functions (declarations)                                            */
 /*****************************************************************************/
 
-static void SearchEngine_Reset(void * const conn);
-static int SearchEngine_Finished(void * const conn);
+static void SearchEngine_Init(
+    tSearchEntity * const se, const void * array, unsigned int length,
+    tGetElementByIdxCallback getElementByIdx, char * buffer);
+static void SearchEngine_Reset(tSearchEntity * const conn);
+static int SearchEngine_Finished(tSearchEntity * const conn);
 static int SearchEngine_Compare(char a, char b);
-static int SearchEngine_CopyInput(void * const conn, char input);
+static int SearchEngine_CopyInput(tSearchEntity * const conn, char input);
 static tSearchEngineResult SearchEngine_Search(
-    void * const conn, char input);
+    tSearchEntity * const conn, char input, unsigned int * idx);
 
 static void CompareEngine_Init(void * const conn);
 static tCompareEngineResult CompareEngine_Compare(
     void * const conn, char input, const tStringWithLength * pattern);
+
+static const tStringWithLength * Utils_GetResourceByIdx(
+   const void * arr, unsigned int idx);
 
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
@@ -447,7 +455,7 @@ static unsigned int DetectUriState(
       if ('/' == *data)
 	{
 	  /* Most common - abs_path */
-	  sm->state = &ParseAbsPathResourceState;
+	  sm->state = &InitializeResourceSearchState;
 	  sm->compareIdx = 0;
 	  sm->left = 0;
 	  sm->right = sm->resourcesLength - 1;
@@ -468,6 +476,19 @@ static unsigned int DetectUriState(
   return 0;
 }
 
+static unsigned int InitializeResourceSearchState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  SearchEngine_Init(&(sm->shared.searchEntity),
+		    sm->resources,
+		    sm->resourcesLength,
+		    &Utils_GetResourceByIdx,
+		    sm->parametersBuffer);
+  sm->state = &ParseAbsPathResourceState;
+  return 0;
+}
+
 static unsigned int ParseAbsPathResourceState(
     void * const conn, const char * data, unsigned int length)
 {
@@ -476,7 +497,8 @@ static unsigned int ParseAbsPathResourceState(
   tSearchEngineResult result;
 
   if (SEARCH_ENGINE_ONGOING ==
-      (result = SearchEngine_Search(conn, *data)))
+      (result = SearchEngine_Search(
+	 &(sm->shared.searchEntity), *data, &(sm->resourceIdx))))
     {
       parsed = 1;
     }
@@ -803,17 +825,32 @@ static unsigned int CallResourceState(
 /* Local functions (definitions)                                             */
 /*****************************************************************************/
 
-static void SearchEngine_Reset(void * const conn)
+/*****************************************************************************/
+/* Search engine                                                             */
+/*****************************************************************************/
+
+static void SearchEngine_Init(
+    tSearchEntity * const se, const void * array, unsigned int length,
+    tGetElementByIdxCallback getElementByIdx, char * buffer)
 {
-  tuCHttpServerState * const sm = conn;
-  sm->compareIdx = 0U;
+  se->array = array;
+  se->buffer = buffer;
+  se->compareIdx = 0U;
+  se->left = 0U;
+  se->right = length - 1;
+  se->length = length;
+  se->getElementByIdx = getElementByIdx;
 }
 
-static int SearchEngine_Finished(void * const conn)
+static void SearchEngine_Reset(tSearchEntity * const se)
+{
+  se->compareIdx = 0U;
+}
+
+static int SearchEngine_Finished(tSearchEntity * const se)
 {
   int result = 0;
-  tuCHttpServerState * const sm = conn;
-  if (sm->left == sm->right)
+  if (se->left == se->right)
     {
       result = 1;
     }
@@ -838,30 +875,26 @@ static int SearchEngine_Compare(char a, char b)
   return result;
 }
 
-static int SearchEngine_CopyInput(void * const conn, char input)
+static int SearchEngine_CopyInput(tSearchEntity * const se, char input)
 {
-  tuCHttpServerState * const sm = conn;
-  unsigned char * bufferIdx = &(sm->inputIdx);
   unsigned int result = 0;
 
-  if (*bufferIdx < HTTP_PARAMETERS_BUFFER_LENGTH)
+  if (se->bufferIdx < se->bufferLength)
     {
-      sm->parametersBuffer[*bufferIdx] = input;
-      ++(*bufferIdx);
+      se->buffer[se->bufferIdx] = input;
+      ++(se->bufferIdx);
       result = 1;
     }
 
   return result;
 }
 
-/* TODO search entity with array and getter functions */
 static tSearchEngineResult SearchEngine_Search(
-    void * const conn, char input)
+    tSearchEntity * const se, char input, unsigned int * idx)
 {
-  tuCHttpServerState * const sm = conn;
   tSearchEngineResult result = SEARCH_ENGINE_ONGOING;
 
-  if (1 != SearchEngine_CopyInput(conn, input))
+  if (1 != SearchEngine_CopyInput(se, input))
     {
       result = SEARCH_ENGINE_BUFFER_EXCEEDED;
     }
@@ -871,55 +904,55 @@ static tSearchEngineResult SearchEngine_Search(
 	{
 	  const tStringWithLength * resWithLength;
 
-	  sm->resourceIdx = ((sm->right - sm->left) >> 1) + sm->left;
-	  resWithLength = &(((*sm->resources)[sm->resourceIdx]).name);
+	  *idx = ((se->right - se->left) >> 1) + se->left;
+	  resWithLength = (se->getElementByIdx)(se->array, *idx);
 
-	  if (sm->compareIdx >= resWithLength->length)
+	  if (se->compareIdx >= resWithLength->length)
 	    {
-	      if (1 == SearchEngine_Finished(conn))
+	      if (1 == SearchEngine_Finished(se))
 		{
 		  result = SEARCH_ENGINE_NOT_FOUND;
 		}
 	      else
 		{
-		  SearchEngine_Reset(conn);
+		  SearchEngine_Reset(se);
 		}
 	    }
 	  else
 	    {
-	      const char * input = sm->parametersBuffer + sm->compareIdx;
-	      const char * resource = resWithLength->str + sm->compareIdx;
+	      const char * input = se->buffer + se->compareIdx;
+	      const char * resource = resWithLength->str + se->compareIdx;
 	      int comparation = SearchEngine_Compare(*input, *resource);
 
 	      if (0 == comparation)
 		{
-		  ++(sm->compareIdx);
+		  ++(se->compareIdx);
 
-		  if (resWithLength->length == sm->compareIdx)
+		  if (resWithLength->length == se->compareIdx)
 		    {
 		      result = SEARCH_ENGINE_FOUND;
 		    }
 		}
 	      else
 		{
-		  if (1 == SearchEngine_Finished(conn))
+		  if (1 == SearchEngine_Finished(se))
 		    {
 		      result = SEARCH_ENGINE_NOT_FOUND;
 		    }
 		  else if (0 < comparation)
 		    {
-		      sm->left = sm->resourceIdx + 1;
+		      se->left = *idx + 1;
 		    }
 		  else if (0 > comparation)
 		    {
-		      sm->right = sm->resourceIdx - 1;
+		      se->right = *idx - 1;
 		    }
 		}
 	    }
 	}
       while (
-	  sm->compareIdx < sm->inputIdx &&  /* Process all available chars */
-	  SEARCH_ENGINE_ONGOING == result); /* Process not finished */
+	  (se->compareIdx < se->bufferIdx) && /* Process all available chars */
+	  SEARCH_ENGINE_ONGOING == result);   /* Process not finished */
     }
 
   return result;
@@ -954,6 +987,13 @@ static tCompareEngineResult CompareEngine_Compare(
     }
 
   return result;
+}
+
+static const tStringWithLength * Utils_GetResourceByIdx(
+    const void * arr, unsigned int idx)
+{
+  const tResourceEntry (*resources)[] = arr;
+  return &(((*resources)[idx]).name);
 }
 
 static unsigned int Utils_SearchPattern(
