@@ -103,7 +103,8 @@ static unsigned int CallResourceState(
 
 static void SearchEngine_Init(
     tSearchEntity * const se, const void * array, unsigned int length,
-    tGetElementByIdxCallback getElementByIdx, char * buffer);
+    tGetElementByIdxCallback getElementByIdx, char * buffer,
+    unsigned char bufferLength);
 static void SearchEngine_Reset(tSearchEntity * const conn);
 static int SearchEngine_Finished(tSearchEntity * const conn);
 static int SearchEngine_Compare(char a, char b);
@@ -484,7 +485,9 @@ static unsigned int InitializeResourceSearchState(
 		    sm->resources,
 		    sm->resourcesLength,
 		    &Utils_GetResourceByIdx,
-		    sm->parametersBuffer);
+		    sm->parametersBuffer,
+		    (unsigned char)(HTTP_PARAMETERS_BUFFER_LENGTH > 255U ?
+			255U : HTTP_PARAMETERS_BUFFER_LENGTH));
   sm->state = &ParseAbsPathResourceState;
   return 0;
 }
@@ -831,15 +834,18 @@ static unsigned int CallResourceState(
 
 static void SearchEngine_Init(
     tSearchEntity * const se, const void * array, unsigned int length,
-    tGetElementByIdxCallback getElementByIdx, char * buffer)
+    tGetElementByIdxCallback getElementByIdx, char * buffer,
+    unsigned char bufferLength)
 {
   se->array = array;
   se->buffer = buffer;
   se->compareIdx = 0U;
+  se->bufferIdx = 0U;
   se->left = 0U;
   se->right = length - 1;
   se->length = length;
   se->getElementByIdx = getElementByIdx;
+  se->bufferLength = bufferLength;
 }
 
 static void SearchEngine_Reset(tSearchEntity * const se)
