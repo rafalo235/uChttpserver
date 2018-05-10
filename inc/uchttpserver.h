@@ -53,19 +53,20 @@ typedef enum HttpStatusCode
   HTTP_BAD_REQUEST,
   HTTP_FORBIDDEN,
   HTTP_STATUS_NOT_FOUND,
-  HTTP_STATUS_SERVER_FAULT
+  HTTP_STATUS_SERVER_FAULT,
+  HTTP_STATUS_NOT_IMPLEMENTED
 } tHttpStatusCode;
 
 typedef enum HttpMethod
 {
-  HTTP_GET = 0,
-  HTTP_POST,
-  HTTP_OPTIONS,
-  HTTP_HEAD,
-  HTTP_PUT,
+  HTTP_CONNECT = 0,
   HTTP_DELETE,
+  HTTP_GET,
+  HTTP_HEAD,
+  HTTP_OPTIONS,
+  HTTP_POST,
+  HTTP_PUT,
   HTTP_TRACE,
-  HTTP_CONNECT
 } tHttpMethod;
 
 /*****************************************************************************/
@@ -113,17 +114,36 @@ typedef struct SearchEntity
 } tSearchEntity;
 
 /*****************************************************************************/
+/* Compare entity                                                            */
+/*****************************************************************************/
+
+typedef struct CompareEntity
+{
+  unsigned char compareIdx;
+} tCompareEntity;
+
+typedef struct ErrorInfo
+{
+  tHttpStatusCode status;
+} tErrorInfo;
+
+/*****************************************************************************/
 /* General inteface                                                          */
 /*****************************************************************************/
 
 typedef unsigned int (*tSendCallback)(
     void * const conn, const char * data, unsigned int length);
 
+typedef void (*tErrorCallback)(
+    void * const conn, const tErrorInfo * errorInfo);
+
 typedef unsigned int (*tParserState)(void * const,
     const char * data, unsigned int length);
 
 typedef union SharedArea {
   tSearchEntity searchEntity;
+  tCompareEntity compareEntity;
+  tErrorInfo errorInfo;
 } tSharedArea;
 
 typedef struct uCHttpServerState
@@ -131,7 +151,6 @@ typedef struct uCHttpServerState
   tSharedArea shared;
   unsigned char method;
   unsigned char compareIdx; /* resource path limit */
-  unsigned char inputIdx;
   unsigned char byte;
   unsigned int resourceIdx;
   unsigned int left;
@@ -141,6 +160,7 @@ typedef struct uCHttpServerState
   const tResourceEntry (*resources)[]; /* Or set as singleton */
   unsigned int resourcesLength;
   tSendCallback send;
+  tErrorCallback onError;
   void * context;
   unsigned int bufferIdx;
   char buffer[HTTP_BUFFER_LENGTH];
@@ -160,6 +180,7 @@ typedef struct uCHttpServerState
 void
 Http_InitializeConnection(tuCHttpServerState * const sm,
 			  tSendCallback send,
+			  tErrorCallback onError,
 			  const tResourceEntry (*resources)[],
 			  unsigned int reslen,
 			  void * context);

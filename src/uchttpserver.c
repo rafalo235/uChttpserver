@@ -62,6 +62,8 @@ typedef enum CompareEngineResultTag
 /*****************************************************************************/
 
 /* Request line                                                              */
+static unsigned int InitState(
+    void * const sm, const char * data, unsigned int length);
 static unsigned int ParseMethodState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int PostMethodState(
@@ -97,6 +99,9 @@ static unsigned int ParseUrlEncodedEntityValue(
 static unsigned int CallResourceState(
     void * const sm, const char * data, unsigned int length);
 
+static unsigned int CallErrorCallbackState(
+    void * const sm, const char * data, unsigned int length);
+
 /*****************************************************************************/
 /* Local functions (declarations)                                            */
 /*****************************************************************************/
@@ -112,12 +117,17 @@ static int SearchEngine_CopyInput(tSearchEntity * const conn, char input);
 static tSearchEngineResult SearchEngine_Search(
     tSearchEntity * const conn, char input, unsigned int * idx);
 
-static void CompareEngine_Init(void * const conn);
+static void CompareEngine_Init(tCompareEntity * const ce);
 static tCompareEngineResult CompareEngine_Compare(
-    void * const conn, char input, const tStringWithLength * pattern);
+    tCompareEntity * const ce, char input, const tStringWithLength * pattern);
+static void CompareEngine_Increment(tCompareEntity * const ce);
 
+static const tStringWithLength * Utils_GetMethodByIdx(
+    const void * arr, unsigned int idx);
 static const tStringWithLength * Utils_GetResourceByIdx(
    const void * arr, unsigned int idx);
+
+static void Utils_MarkError(void * const conn, tErrorInfo info);
 
 static unsigned int Utils_SearchPattern(
     const char *pattern, const char *stream,
@@ -160,16 +170,16 @@ const tStringWithLength QUESTION_MARK = STRING_WITH_LENGTH(" ");
 const char CRLF[] = "\r\n";
 const char const ESCAPE_CHARACTER = '%';
 
-const tStringWithLength methods[] =
+const tStringWithLength methods[8] =
     {
-	 STRING_WITH_LENGTH("GET"), /* Most commonly used */
-	 STRING_WITH_LENGTH("POST"),
-	 STRING_WITH_LENGTH("OPTIONS"),
-	 STRING_WITH_LENGTH("HEAD"),
-	 STRING_WITH_LENGTH("PUT"),
+	 STRING_WITH_LENGTH("CONNECT"),
 	 STRING_WITH_LENGTH("DELETE"),
-	 STRING_WITH_LENGTH("TRACE"),
-	 STRING_WITH_LENGTH("CONNECT")
+	 STRING_WITH_LENGTH("GET"),
+	 STRING_WITH_LENGTH("HEAD"),
+	 STRING_WITH_LENGTH("OPTIONS"),
+	 STRING_WITH_LENGTH("POST"),
+	 STRING_WITH_LENGTH("PUT"),
+	 STRING_WITH_LENGTH("TRACE")
     };
 const char * statuscodes[][2] =
     {
@@ -178,7 +188,8 @@ const char * statuscodes[][2] =
 	{ "400", "Bad Request"},
 	{ "403", "Forbidden"},
 	{ "404", "Not Found" },
-	{ "500", "Server fault" }
+	{ "500", "Server fault" },
+	{ "501", "Not Implemented" }
     };
 
 /*****************************************************************************/
@@ -188,12 +199,14 @@ const char * statuscodes[][2] =
 void
 Http_InitializeConnection(tuCHttpServerState * const sm,
 			  tSendCallback send,
+			  tErrorCallback onError,
 			  const tResourceEntry (*resources)[],
 			  unsigned int reslen,
 			  void * context)
 {
-  sm->state = &ParseMethodState;
+  sm->state = &InitState;
   sm->send = send;
+  sm->onError = onError;
   sm->resources = resources;
   sm->resourcesLength = reslen;
   sm->context = context;
@@ -343,85 +356,52 @@ void Http_HelperFlush(tuCHttpServerState * const sm)
 /* Connection states (definitions)                                           */
 /*****************************************************************************/
 
+static unsigned int InitState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+
+  /* Initialize method search */
+  SearchEngine_Init(&(sm->shared.searchEntity),
+		    methods,
+		    sizeof(methods)/sizeof(methods[0]),
+		    &Utils_GetMethodByIdx,
+		    sm->parametersBuffer,
+		    (unsigned char)(HTTP_PARAMETERS_BUFFER_LENGTH > 255U ?
+			255U : HTTP_PARAMETERS_BUFFER_LENGTH));
+
+  sm->state = &ParseMethodState;
+
+  return 0;
+}
+
 /* Parse request states definitions */
 static unsigned int ParseMethodState(
     void * const conn, const char * data, unsigned int length)
 {
-  static const char *found = NULL;
-  static unsigned int tofoundlen = 0U;
-  static unsigned char foundidx;
   tuCHttpServerState * const sm = conn;
-  unsigned int i;
-  unsigned int size = sizeof(methods)/sizeof(methods[0]);
-  unsigned int parsed = 0;
+  unsigned int parsed;
+  tSearchEngineResult result;
 
-  /* Pattern already started on stream,
-   * check if it's continued */
-  if (found != NULL)
+  if (SEARCH_ENGINE_ONGOING ==
+      (result = SearchEngine_Search(
+	 &(sm->shared.searchEntity), *data, &(sm->method))))
     {
-      unsigned int counted =
-	  Utils_SearchPattern(found, data, tofoundlen, length);
-      if (counted == tofoundlen)
-	{
-	  /* Match! */
-	  parsed += tofoundlen;
-	  sm->method = foundidx;
-	  sm->state = &PostMethodState;
-	  length = 0;
-	}
-      else if (counted == length)
-	{
-	  parsed += length;
-	  /* Stream shorter than pattern,
-	   * continue searching on next input */
-	  found += length;
-	  tofoundlen -= length;
-
-	  length = 0;
-	}
-      else
-	{
-	  /* Pattern broken,
-	   * continue searching other patterns */
-	  found = NULL;
-	  tofoundlen = 0U;
-	  /* Leave <parsed> unchanged */
-	}
+      parsed = 1;
+    }
+  else if (SEARCH_ENGINE_FOUND == result)
+    {
+      parsed = 1;
+      sm->state = &PostMethodState;
+    }
+  else
+    {
+      tErrorInfo info;
+      info.status = HTTP_STATUS_NOT_IMPLEMENTED;
+      Utils_MarkError(conn, info);
+      parsed = 0;
     }
 
-  while (length)
-    {
-      /* Linear search - not a lot of elements */
-      for (i = 0; i < size; ++i)
-	{
-	  unsigned int counted =
-	      Utils_SearchPattern(methods[i].str,
-                  data, methods[i].length, length);
-	  if (counted == methods[i].length)
-	    {
-	      /* Match! */
-	      parsed += methods[i].length;
-	      sm->method = i; /* tHttpMethod */
-	      sm->state = &PostMethodState;
-	      length = 0;
-	      break;
-	    }
-	  else if (counted == length)
-	    {
-	      parsed += length;
-
-	      /* To be continued */
-	      /* FIXME stream ends with 'P' */
-	      found = methods[i].str + length;
-	      tofoundlen = methods[i].length - length;
-	      foundidx = i;
-
-	      /* Exit outer loop */
-	      length = 0;
-	      break;
-	    }
-	}
-    }
   return parsed;
 }
 
@@ -440,8 +420,11 @@ static unsigned int PostMethodState(
 	}
       else
 	{
-	  /* Error - expected SP */
-	  sm->state = &ParseMethodState;
+	  /* Space expected */
+	  tErrorInfo info;
+	  info.status = HTTP_BAD_REQUEST;
+	  Utils_MarkError(conn, info);
+	  parsed = 0;
 	}
     }
   return parsed;
@@ -457,20 +440,20 @@ static unsigned int DetectUriState(
 	{
 	  /* Most common - abs_path */
 	  sm->state = &InitializeResourceSearchState;
-	  sm->compareIdx = 0;
-	  sm->left = 0;
-	  sm->right = sm->resourcesLength - 1;
 	}
       else if ('*' == *data)
 	{
 	  /* Server request */
-	  sm->state = &ParseMethodState;
-
+	  tErrorInfo info;
+	  info.status = HTTP_STATUS_NOT_IMPLEMENTED;
+	  Utils_MarkError(conn, info);
 	}
       else
 	{
 	  /* Host ?proxy? */
-	  sm->state = &ParseMethodState;
+	  tErrorInfo info;
+	  info.status = HTTP_STATUS_NOT_IMPLEMENTED;
+	  Utils_MarkError(conn, info);
 	}
     }
 
@@ -507,15 +490,9 @@ static unsigned int ParseAbsPathResourceState(
     }
   else if (SEARCH_ENGINE_FOUND == result)
     {
-      /* workaround */
-      //parsed = 1;
-      sm->byte = 0;
-      /* fixme parse get parameters */
-      sm->compareIdx = 0;
-      sm->left = 0;
-      sm->right = 0;
-      parsed = 2;
-      sm->state = &ParseHttpVersion;
+      parsed = 1;
+      CompareEngine_Init(&(sm->shared.compareEntity));
+      sm->state = &ParseResourceEnding;
     }
   else if (SEARCH_ENGINE_NOT_FOUND == result)
     {
@@ -537,9 +514,11 @@ static unsigned int ParseResourceEnding(
   tuCHttpServerState * const sm = conn;
   unsigned int parsed = 1U;
   tCompareEngineResult spaceResult =
-      CompareEngine_Compare(conn, *data, &SP);
+      CompareEngine_Compare(
+	  &(sm->shared.compareEntity), *data, &SP);
   tCompareEngineResult questionMarkResult =
-      CompareEngine_Compare(conn, *data, &QUESTION_MARK);
+      CompareEngine_Compare(
+	  &(sm->shared.compareEntity), *data, &QUESTION_MARK);
 
   if (COMPARE_ENGINE_MATCH == spaceResult)
     {
@@ -555,6 +534,7 @@ static unsigned int ParseResourceEnding(
       /* todo bad request */
       parsed = 0U;
     }
+  CompareEngine_Increment(&(sm->shared.compareEntity));
 
   return parsed;
 }
@@ -824,6 +804,15 @@ static unsigned int CallResourceState(
   return 0;
 }
 
+static unsigned int CallErrorCallbackState(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  sm->onError(conn, &(sm->shared.errorInfo));
+  sm->state = &InitState;
+  return 1; /* fixme maybe length? */
+}
+
 /*****************************************************************************/
 /* Local functions (definitions)                                             */
 /*****************************************************************************/
@@ -964,25 +953,26 @@ static tSearchEngineResult SearchEngine_Search(
   return result;
 }
 
-static void CompareEngine_Init(void * const conn)
+static void CompareEngine_Init(tCompareEntity * const ce)
 {
-  tuCHttpServerState * const sm = conn;
-  sm->compareIdx = 0U;
+  ce->compareIdx = 0U;
 }
 
 static tCompareEngineResult CompareEngine_Compare(
-    void * const conn, char input, const tStringWithLength * pattern)
+    tCompareEntity * const ce, char input, const tStringWithLength * pattern)
 {
-  tuCHttpServerState * const sm = conn;
   tCompareEngineResult result;
 
-  if (pattern->str[sm->compareIdx] == input)
+  if (pattern->length <= ce->compareIdx)
     {
-      ++(sm->compareIdx);
+      result = COMPARE_ENGINE_NOT_MATCH;
+    }
+  else if (pattern->str[ce->compareIdx] == input)
+    {
       result = COMPARE_ENGINE_ONGOING;
 
       /* Check if all characters are processed */
-      if (pattern->length == sm->compareIdx)
+      if (pattern->length == ce->compareIdx)
         {
           result = COMPARE_ENGINE_MATCH;
         }
@@ -995,11 +985,30 @@ static tCompareEngineResult CompareEngine_Compare(
   return result;
 }
 
+static void CompareEngine_Increment(tCompareEntity * const ce)
+{
+  ++(ce->compareIdx);
+}
+
+static const tStringWithLength * Utils_GetMethodByIdx(
+    const void * arr, unsigned int idx)
+{
+  const tStringWithLength (*methods)[] = arr;
+  return &((*methods)[idx]);
+}
+
 static const tStringWithLength * Utils_GetResourceByIdx(
     const void * arr, unsigned int idx)
 {
   const tResourceEntry (*resources)[] = arr;
   return &(((*resources)[idx]).name);
+}
+
+static void Utils_MarkError(void * const conn, tErrorInfo info)
+{
+  tuCHttpServerState * const sm = conn;
+  sm->shared.errorInfo = info;
+  sm->state = &CallErrorCallbackState;
 }
 
 static unsigned int Utils_SearchPattern(
