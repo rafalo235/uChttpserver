@@ -53,6 +53,7 @@ typedef enum HttpStatusCode
   HTTP_BAD_REQUEST,
   HTTP_FORBIDDEN,
   HTTP_STATUS_NOT_FOUND,
+  HTTP_STATUS_REQUEST_URI_TOO_LONG,
   HTTP_STATUS_SERVER_FAULT,
   HTTP_STATUS_NOT_IMPLEMENTED
 } tHttpStatusCode;
@@ -122,6 +123,10 @@ typedef struct CompareEntity
   unsigned char compareIdx;
 } tCompareEntity;
 
+/*****************************************************************************/
+/* Error information                                                         */
+/*****************************************************************************/
+
 typedef struct ErrorInfo
 {
   tHttpStatusCode status;
@@ -140,9 +145,22 @@ typedef void (*tErrorCallback)(
 typedef unsigned int (*tParserState)(void * const,
     const char * data, unsigned int length);
 
-typedef union SharedArea {
+typedef struct SearchPhaseArea
+{
   tSearchEntity searchEntity;
+
+} tSearchPhaseArea;
+
+typedef struct ParsePhaseArea
+{
   tCompareEntity compareEntity;
+
+} tParsePhaseArea;
+
+typedef union SharedArea
+{
+  tSearchPhaseArea search;
+  tParsePhaseArea parse;
   tErrorInfo errorInfo;
 } tSharedArea;
 

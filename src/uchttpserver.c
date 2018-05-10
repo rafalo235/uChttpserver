@@ -188,6 +188,7 @@ const char * statuscodes[][2] =
 	{ "400", "Bad Request"},
 	{ "403", "Forbidden"},
 	{ "404", "Not Found" },
+	{ "411", "Request-URI Too Long" },
 	{ "500", "Server fault" },
 	{ "501", "Not Implemented" }
     };
@@ -486,23 +487,27 @@ static unsigned int ParseAbsPathResourceState(
       (result = SearchEngine_Search(
 	 &(sm->shared.searchEntity), *data, &(sm->resourceIdx))))
     {
-      parsed = 1;
+      parsed = 1U;
     }
   else if (SEARCH_ENGINE_FOUND == result)
     {
-      parsed = 1;
       CompareEngine_Init(&(sm->shared.compareEntity));
       sm->state = &ParseResourceEnding;
+      parsed = 1U;
     }
   else if (SEARCH_ENGINE_NOT_FOUND == result)
     {
-      parsed = 1;
-      /* todo error callback */
+      tErrorInfo info;
+      info.status = HTTP_STATUS_NOT_FOUND;
+      Utils_MarkError(conn, info);
+      parsed = 0U;
     }
   else if (SEARCH_ENGINE_BUFFER_EXCEEDED == result)
     {
-      parsed = 1;
-      /* todo error callback */
+      tErrorInfo info;
+      info.status = HTTP_STATUS_REQUEST_URI_TOO_LONG;
+      Utils_MarkError(conn, info);
+      parsed = 0U;
     }
 
   return parsed;
@@ -512,7 +517,7 @@ static unsigned int ParseResourceEnding(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 1U;
+  unsigned int parsed;
   tCompareEngineResult spaceResult =
       CompareEngine_Compare(
 	  &(sm->shared.compareEntity), *data, &SP);
@@ -523,18 +528,26 @@ static unsigned int ParseResourceEnding(
   if (COMPARE_ENGINE_MATCH == spaceResult)
     {
       sm->state = &ParseHttpVersion;
+      parsed = 1U;
     }
   else if (COMPARE_ENGINE_MATCH == questionMarkResult)
     {
       sm->state = &ParseUrlEncodedFormName;
+      parsed = 1U;
     }
-  else if ((COMPARE_ENGINE_ONGOING != spaceResult) &&
+  else if ((COMPARE_ENGINE_ONGOING != spaceResult) ||
       (COMPARE_ENGINE_ONGOING != questionMarkResult))
     {
-      /* todo bad request */
+      CompareEngine_Increment(&(sm->shared.compareEntity));
+      parsed = 1U;
+    }
+  else
+    {
+      tErrorInfo info;
+      info.status = HTTP_BAD_REQUEST;
+      Utils_MarkError(conn, info);
       parsed = 0U;
     }
-  CompareEngine_Increment(&(sm->shared.compareEntity));
 
   return parsed;
 }
@@ -543,25 +556,26 @@ static unsigned int ParseUrlEncodedFormName(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
 
   if ('=' == *data)
     {
       sm->state = &ParseUrlEncodedFormValue;
       Utils_AddParameterCharacter(conn, '\0');
       Utils_AddParameterValue(conn);
-      parsed = 1;
+      parsed = 1U;
     }
   else if (' ' == *data)
     {
-      sm->state = &ParseHttpVersion;
       Utils_AddParameterCharacter(conn, '\0');
-      parsed = 1;
+      CompareEngine_Init(&(sm->shared.compareEntity));
+      sm->state = &ParseResourceEnding;
+      parsed = 1U;
     }
   else
     {
       Utils_AddParameterCharacter(conn, *data);
-      parsed = 1;
+      parsed = 1U;
     }
 
   return parsed;
@@ -571,25 +585,26 @@ static unsigned int ParseUrlEncodedFormValue(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
 
   if ('&' == *data)
     {
       sm->state = &ParseUrlEncodedFormName;
       Utils_AddParameterCharacter(conn, '\0');
       Utils_AddParameterName(conn);
-      parsed = 1;
+      parsed = 1U;
     }
   else if (' ' == *data)
     {
-      sm->state = &ParseHttpVersion;
       Utils_AddParameterCharacter(conn, '\0');
-      parsed = 1;
+      CompareEngine_Init(&(sm->shared.compareEntity));
+      sm->state = &ParseResourceEnding;
+      parsed = 1U;
     }
   else
     {
       Utils_AddParameterCharacter(conn, *data);
-      parsed = 1;
+      parsed = 1U;
     }
 
   return parsed;
