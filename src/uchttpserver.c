@@ -57,6 +57,13 @@ typedef enum CompareEngineResultTag
   COMPARE_ENGINE_NOT_MATCH
 } tCompareEngineResult;
 
+typedef enum ParameterEngineResult
+{
+  PARAMETER_ENGINE_OK,
+  PARAMETER_ENGINE_SLOTS_FULL,
+  PARAMETER_ENGINE_BUFFER_FULL
+} tParameterEngineResult;
+
 /*****************************************************************************/
 /* Connection states (declarations)                                          */
 /*****************************************************************************/
@@ -122,6 +129,13 @@ static tCompareEngineResult CompareEngine_Compare(
     tCompareEntity * const ce, char input, const tStringWithLength * pattern);
 static void CompareEngine_Increment(tCompareEntity * const ce);
 
+static void ParameterEngine_AddParameterName(
+    tParameterEntity * const pe);
+static void ParameterEngine_AddParameterValue(
+    tParameterEntity * const pe);
+static void ParameterEngine_AddParameterCharacter(
+    tParameterEntity * const pe, char ch);
+
 static const tStringWithLength * Utils_GetMethodByIdx(
     const void * arr, unsigned int idx);
 static const tStringWithLength * Utils_GetResourceByIdx(
@@ -129,24 +143,12 @@ static const tStringWithLength * Utils_GetResourceByIdx(
 
 static void Utils_MarkError(void * const conn, tErrorInfo info);
 
-static unsigned int Utils_SearchPattern(
-    const char *pattern, const char *stream,
-    unsigned int pattenlen, unsigned int streamlen);
-
 static char Utils_ToLowerCase(char input);
 
 static unsigned int Utils_SearchNullTerminatedPattern(
     const char * pattern, const char * input);
 
 static int Utils_AtoiNullTerminated(const char * str);
-
-static void Utils_AddParameterName(void * const conn);
-
-static void Utils_AddParameterValue(void * const conn);
-
-static void Utils_AddParameterCharacter(void * const conn, char ch);
-
-static int Utils_Compare(const char * a, const char * b);
 
 static void Utils_PrintParameter(
     void * const conn, const char * format, const void * param);
@@ -363,7 +365,7 @@ static unsigned int InitState(
   tuCHttpServerState * const sm = conn;
 
   /* Initialize method search */
-  SearchEngine_Init(&(sm->shared.searchEntity),
+  SearchEngine_Init(&(sm->shared.search.searchEntity),
 		    methods,
 		    sizeof(methods)/sizeof(methods[0]),
 		    &Utils_GetMethodByIdx,
@@ -386,7 +388,7 @@ static unsigned int ParseMethodState(
 
   if (SEARCH_ENGINE_ONGOING ==
       (result = SearchEngine_Search(
-	 &(sm->shared.searchEntity), *data, &(sm->method))))
+	 &(sm->shared.search.searchEntity), *data, &(sm->method))))
     {
       parsed = 1;
     }
@@ -465,7 +467,7 @@ static unsigned int InitializeResourceSearchState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  SearchEngine_Init(&(sm->shared.searchEntity),
+  SearchEngine_Init(&(sm->shared.search.searchEntity),
 		    sm->resources,
 		    sm->resourcesLength,
 		    &Utils_GetResourceByIdx,
@@ -485,13 +487,13 @@ static unsigned int ParseAbsPathResourceState(
 
   if (SEARCH_ENGINE_ONGOING ==
       (result = SearchEngine_Search(
-	 &(sm->shared.searchEntity), *data, &(sm->resourceIdx))))
+	 &(sm->shared.search.searchEntity), *data, &(sm->resourceIdx))))
     {
       parsed = 1U;
     }
   else if (SEARCH_ENGINE_FOUND == result)
     {
-      CompareEngine_Init(&(sm->shared.compareEntity));
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
       parsed = 1U;
     }
@@ -520,10 +522,10 @@ static unsigned int ParseResourceEnding(
   unsigned int parsed;
   tCompareEngineResult spaceResult =
       CompareEngine_Compare(
-	  &(sm->shared.compareEntity), *data, &SP);
+	  &(sm->shared.parse.compareEntity), *data, &SP);
   tCompareEngineResult questionMarkResult =
       CompareEngine_Compare(
-	  &(sm->shared.compareEntity), *data, &QUESTION_MARK);
+	  &(sm->shared.parse.compareEntity), *data, &QUESTION_MARK);
 
   if (COMPARE_ENGINE_MATCH == spaceResult)
     {
@@ -538,7 +540,7 @@ static unsigned int ParseResourceEnding(
   else if ((COMPARE_ENGINE_ONGOING != spaceResult) ||
       (COMPARE_ENGINE_ONGOING != questionMarkResult))
     {
-      CompareEngine_Increment(&(sm->shared.compareEntity));
+      CompareEngine_Increment(&(sm->shared.parse.compareEntity));
       parsed = 1U;
     }
   else
@@ -561,20 +563,22 @@ static unsigned int ParseUrlEncodedFormName(
   if ('=' == *data)
     {
       sm->state = &ParseUrlEncodedFormValue;
-      Utils_AddParameterCharacter(conn, '\0');
-      Utils_AddParameterValue(conn);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
       parsed = 1U;
     }
   else if (' ' == *data)
     {
-      Utils_AddParameterCharacter(conn, '\0');
-      CompareEngine_Init(&(sm->shared.compareEntity));
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
       parsed = 1U;
     }
   else
     {
-      Utils_AddParameterCharacter(conn, *data);
+      ParameterEngine_AddParameterCharacter(conn, *data);
       parsed = 1U;
     }
 
@@ -590,20 +594,23 @@ static unsigned int ParseUrlEncodedFormValue(
   if ('&' == *data)
     {
       sm->state = &ParseUrlEncodedFormName;
-      Utils_AddParameterCharacter(conn, '\0');
-      Utils_AddParameterName(conn);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
       parsed = 1U;
     }
   else if (' ' == *data)
     {
-      Utils_AddParameterCharacter(conn, '\0');
-      CompareEngine_Init(&(sm->shared.compareEntity));
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
       parsed = 1U;
     }
   else
     {
-      Utils_AddParameterCharacter(conn, *data);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       parsed = 1U;
     }
 
@@ -653,7 +660,7 @@ static unsigned int CheckHeaderEndState(
   else
     {
       sm->state = &ParseParameterNameState;
-      Utils_AddParameterName(conn);
+      ParameterEngine_AddParameterName(conn);
 
       parsed = 0;
     }
@@ -671,14 +678,16 @@ static unsigned int ParseParameterNameState(
     {
       /* Set next state */
       sm->state = &ParseParameterValueState;
-      Utils_AddParameterCharacter(conn, '\0');
-      Utils_AddParameterValue(conn);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
 
       parsed = 1;
     }
   else
     {
-      Utils_AddParameterCharacter(conn, *data);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       parsed = 1;
     }
   return parsed;
@@ -693,7 +702,8 @@ static unsigned int ParseParameterValueState(
 
   if (2 == sm->compareIdx)
     {
-      Utils_AddParameterCharacter(conn, '\0');
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
       sm->compareIdx = 0;
       sm->state = &CheckHeaderEndState;
     }
@@ -709,7 +719,8 @@ static unsigned int ParseParameterValueState(
     }
   else
     {
-      Utils_AddParameterCharacter(conn, *data);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       parsed = 1;
     }
 
@@ -739,7 +750,7 @@ static unsigned int AnalyzeEntityState(
 	{
 	  sm->contentLength = 0;
 	}
-      Utils_AddParameterName(conn);
+      ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
     }
   else
     {
@@ -757,20 +768,23 @@ static unsigned int ParseUrlEncodedEntityName(
   if (0U == sm->contentLength)
     {
       sm->state = &CallResourceState;
-      Utils_AddParameterCharacter(conn, '\0');
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
       parsed = 0U;
     }
   else if ('=' == *data)
     {
       sm->state = &ParseUrlEncodedEntityValue;
-      Utils_AddParameterCharacter(conn, '\0');
-      Utils_AddParameterValue(conn);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
       sm->contentLength--;
       parsed = 1;
     }
   else
     {
-      Utils_AddParameterCharacter(conn, *data);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       sm->contentLength--;
       parsed = 1;
     }
@@ -787,20 +801,23 @@ static unsigned int ParseUrlEncodedEntityValue(
   if (0U == sm->contentLength)
     {
       sm->state = &CallResourceState;
-      Utils_AddParameterCharacter(conn, '\0');
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
       parsed = 0U;
     }
   else if ('&' == *data)
     {
       sm->state = &ParseUrlEncodedEntityName;
-      Utils_AddParameterCharacter(conn, '\0');
-      Utils_AddParameterName(conn);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), '\0');
+      ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
       sm->contentLength--;
       parsed = 1;
     }
   else
     {
-      Utils_AddParameterCharacter(conn, *data);
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       sm->contentLength--;
       parsed = 1;
     }
@@ -1026,25 +1043,6 @@ static void Utils_MarkError(void * const conn, tErrorInfo info)
   sm->state = &CallErrorCallbackState;
 }
 
-static unsigned int Utils_SearchPattern(
-    const char *pattern, const char *stream,
-    unsigned int patternlen, unsigned int streamlen)
-{
-  unsigned int ret = 0;
-  while ((patternlen--) && (streamlen--))
-    {
-      if (*pattern == *stream)
-	{
-	  ++ret;
-	}
-      else
-	{
-	  break;
-	}
-    }
-  return ret;
-}
-
 static char Utils_ToLowerCase(char input)
 {
   char result = input;
@@ -1107,63 +1105,67 @@ static int Utils_AtoiNullTerminated(const char * str)
   return result * multiplier;
 }
 
-static void Utils_AddParameterName(void * const conn)
+static tParameterEngineResult ParameterEngine_AddParameterName(
+    tParameterEntity * const pe)
 {
-  tuCHttpServerState * const sm = conn;
-  unsigned int * paramIdx = &(sm->left);
-  unsigned int * bufferIdx = &(sm->right);
+  tParameterEngineResult result;
 
-  if (*paramIdx <= HTTP_PARAMETERS_MAX)
+  if (pe->parameterIdx < pe->parameterLength)
     {
-      sm->parameters[*paramIdx][0] = &(sm->parametersBuffer[*bufferIdx]);
-    }
-}
-
-static void Utils_AddParameterValue(void * const conn)
-{
-  tuCHttpServerState * const sm = conn;
-  unsigned int * paramIdx = &(sm->left);
-  unsigned int * bufferIdx = &(sm->right);
-
-  if (*paramIdx < HTTP_PARAMETERS_MAX)
-    {
-      sm->parameters[*paramIdx][1] = &(sm->parametersBuffer[*bufferIdx]);
-      ++(*paramIdx);
-    }
-}
-
-static void Utils_AddParameterCharacter(void * const conn, char ch)
-{
-  tuCHttpServerState * const sm = conn;
-  unsigned int * bufferIdx = &(sm->right);
-
-  if (*bufferIdx < (HTTP_PARAMETERS_BUFFER_LENGTH - 1))
-    {
-      sm->parametersBuffer[*bufferIdx] = ch;
-      ++(*bufferIdx);
-    }
-  else if (*bufferIdx == (HTTP_PARAMETERS_BUFFER_LENGTH - 1) &&
-      sm->parametersBuffer[*bufferIdx])
-    {
-      sm->parametersBuffer[*bufferIdx] = '\0';
-    }
-}
-
-static int Utils_Compare(const char * a, const char * b)
-{
-  int result;
-  if (*a > *b)
-    {
-      result = 1;
-    }
-  else if (*a < *b)
-    {
-      result = -1;
+      (*pe->parameters)[pe->parameterIdx][0] =
+	  &((*pe->buffer)[pe->bufferIdx]);
+      result = PARAMETER_ENGINE_OK;
     }
   else
     {
-      result = 0;
+      result = PARAMETER_ENGINE_SLOTS_FULL;
     }
+
+  return result;
+}
+
+static tParameterEngineResult ParameterEngine_AddParameterValue(
+    tParameterEntity * const pe)
+{
+  tParameterEngineResult result;
+
+  if (pe->parameterIdx < pe->parameterLength)
+    {
+      (*pe->parameters)[pe->parameterIdx][1] =
+	  &((*pe->buffer)[pe->bufferIdx]);
+      ++(pe->parameterIdx);
+      result = PARAMETER_ENGINE_OK;
+    }
+  else
+    {
+      result = PARAMETER_ENGINE_SLOTS_FULL;
+    }
+
+  return result;
+}
+
+static tParameterEngineResult ParameterEngine_AddParameterCharacter(
+    tParameterEntity * const pe, char ch)
+{
+  tParameterEngineResult result;
+
+  if (pe->bufferIdx < (pe->bufferLength - 1))
+    {
+      (*pe->buffer)[pe->bufferIdx] = ch;
+      ++(pe->bufferIdx);
+      result = PARAMETER_ENGINE_OK;
+    }
+  else if (pe->bufferIdx == (pe->bufferLength - 1))
+    {
+      pe->buffer[pe->bufferIdx] = '\0';
+      ++(pe->bufferIdx);
+      result = PARAMETER_ENGINE_BUFFER_FULL;
+    }
+  else
+    {
+      result = PARAMETER_ENGINE_BUFFER_FULL;
+    }
+
   return result;
 }
 

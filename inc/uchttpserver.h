@@ -124,6 +124,20 @@ typedef struct CompareEntity
 } tCompareEntity;
 
 /*****************************************************************************/
+/* Parameter entity                                                          */
+/*****************************************************************************/
+
+typedef struct ParameterEntity
+{
+  unsigned int bufferIdx;
+  unsigned int bufferLength;
+  char ** buffer;
+  char * (*parameters)[][2];
+  unsigned char parameterIdx;
+  unsigned char parameterLength;
+} tParameterEntity;
+
+/*****************************************************************************/
 /* Error information                                                         */
 /*****************************************************************************/
 
@@ -153,8 +167,8 @@ typedef struct SearchPhaseArea
 
 typedef struct ParsePhaseArea
 {
+  tParameterEntity parameterEntity;
   tCompareEntity compareEntity;
-
 } tParsePhaseArea;
 
 typedef union SharedArea
