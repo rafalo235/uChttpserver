@@ -69,7 +69,7 @@ typedef enum ParameterEngineResult
 /*****************************************************************************/
 
 /* Request line                                                              */
-static unsigned int InitState(
+static unsigned int InitSearchMethodState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseMethodState(
     void * const sm, const char * data, unsigned int length);
@@ -77,6 +77,8 @@ static unsigned int PostMethodState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int DetectUriState(
     void * const sm, const char * data, unsigned int length);
+
+
 static unsigned int InitializeResourceSearchState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
@@ -129,6 +131,9 @@ static tCompareEngineResult CompareEngine_Compare(
     tCompareEntity * const ce, char input, const tStringWithLength * pattern);
 static void CompareEngine_Increment(tCompareEntity * const ce);
 
+static void ParameterEngine_Init(
+    tParameterEntity * const pe, char (*buffer)[], char * (*parameters)[][2],
+    unsigned int bufferLength, unsigned char parameterLength);
 static void ParameterEngine_AddParameterName(
     tParameterEntity * const pe);
 static void ParameterEngine_AddParameterValue(
@@ -207,7 +212,7 @@ Http_InitializeConnection(tuCHttpServerState * const sm,
 			  unsigned int reslen,
 			  void * context)
 {
-  sm->state = &InitState;
+  sm->state = &InitSearchMethodState;
   sm->send = send;
   sm->onError = onError;
   sm->resources = resources;
@@ -359,7 +364,7 @@ void Http_HelperFlush(tuCHttpServerState * const sm)
 /* Connection states (definitions)                                           */
 /*****************************************************************************/
 
-static unsigned int InitState(
+static unsigned int InitSearchMethodState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
@@ -494,6 +499,11 @@ static unsigned int ParseAbsPathResourceState(
   else if (SEARCH_ENGINE_FOUND == result)
     {
       CompareEngine_Init(&(sm->shared.parse.compareEntity));
+      ParameterEngine_Init(&(sm->shared.parse.parameterEntity),
+			   &(sm->parametersBuffer),
+			   &(sm->parameters),
+			   HTTP_PARAMETERS_BUFFER_LENGTH,
+			   HTTP_PARAMETERS_MAX);
       sm->state = &ParseResourceEnding;
       parsed = 1U;
     }
@@ -529,6 +539,7 @@ static unsigned int ParseResourceEnding(
 
   if (COMPARE_ENGINE_MATCH == spaceResult)
     {
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseHttpVersion;
       parsed = 1U;
     }
@@ -841,7 +852,7 @@ static unsigned int CallErrorCallbackState(
 {
   tuCHttpServerState * const sm = conn;
   sm->onError(conn, &(sm->shared.errorInfo));
-  sm->state = &InitState;
+  sm->state = &InitSearchMethodState;
   return 1; /* fixme maybe length? */
 }
 
@@ -1103,6 +1114,18 @@ static int Utils_AtoiNullTerminated(const char * str)
       ++str;
     }
   return result * multiplier;
+}
+
+static void ParameterEngine_Init(
+    tParameterEntity * const pe, char (*buffer)[], char * (*parameters)[][2],
+    unsigned int bufferLength, unsigned char parameterLength)
+{
+  pe->bufferIdx = 0U;
+  pe->parameterIdx = 0U;
+  pe->buffer = buffer;
+  pe->parameters = parameters;
+  pe->bufferLength = bufferLength;
+  pe->parameterLength = parameterLength;
 }
 
 static tParameterEngineResult ParameterEngine_AddParameterName(
