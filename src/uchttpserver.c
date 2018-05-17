@@ -170,7 +170,11 @@ static void Http_SendNullTerminatedPortWrapper(
 /* Local variables and constants                                             */
 /*****************************************************************************/
 
+const tStringWithLength HTTP_VERSION = STRING_WITH_LENGTH("HTTP/1.1\r\n");
+/* fixme is '\r\n needed */
+
 const tStringWithLength SP = STRING_WITH_LENGTH(" ");
+const tStringWithLength CRLFwL = STRING_WITH_LENGTH("\r\n"); /* fixme name */
 const tStringWithLength QUESTION_MARK = STRING_WITH_LENGTH(" ");
 
 const char CRLF[] = "\r\n";
@@ -196,7 +200,8 @@ const char * statuscodes[][2] =
 	{ "404", "Not Found" },
 	{ "411", "Request-URI Too Long" },
 	{ "500", "Server fault" },
-	{ "501", "Not Implemented" }
+	{ "501", "Not Implemented" },
+	{ "505", "Version not supported" }
     };
 
 /*****************************************************************************/
@@ -636,22 +641,29 @@ static unsigned int ParseHttpVersion(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
+  tCompareEngineResult result =
+      CompareEngine_Compare(
+	  &(sm->shared.parse.compareEntity), *data, &HTTP_VERSION);
 
-  if (2 == sm->compareIdx)
+  if (COMPARE_ENGINE_MATCH == result)
     {
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->compareIdx = 0;
       sm->state = &CheckHeaderEndState;
-      parsed = 0;
+      parsed = 1U;
     }
-  else if (CRLF[sm->compareIdx] == *data)
+  else if (COMPARE_ENGINE_ONGOING == result)
     {
-      ++(sm->compareIdx);
-      parsed = 1;
+      CompareEngine_Increment(&(sm->shared.parse.compareEntity));
+      parsed = 1U;
     }
   else
     {
-      parsed = 1;
+      tErrorInfo info;
+      info.status = HTTP_VERSION_NOT_IMPLEMENTED;
+      Utils_MarkError(conn, info);
+      parsed = 0U;
     }
 
   return parsed;
@@ -847,7 +859,7 @@ static unsigned int CallResourceState(
 
   (*sm->resources)[sm->resourceIdx].callback(conn);
   /* End of parsing request */
-  sm->state = &ParseMethodState;
+  sm->state = &InitSearchMethodState;
   return 0;
 }
 
@@ -1019,7 +1031,7 @@ static tCompareEngineResult CompareEngine_Compare(
       result = COMPARE_ENGINE_ONGOING;
 
       /* Check if all characters are processed */
-      if (pattern->length == ce->compareIdx)
+      if ((pattern->length - 1) == ce->compareIdx)
         {
           result = COMPARE_ENGINE_MATCH;
         }
