@@ -37,3 +37,10 @@ unsigned int Http_SendPort(
   fflush(stdout);
   return length;
 }
+
+void Http_ErrorPort(
+    void * const conn, const tErrorInfo * errorInfo)
+{
+  fprintf(stdout, "Error %u occured\n", errorInfo->status);
+  fflush(stdout);
+}

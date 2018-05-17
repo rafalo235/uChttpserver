@@ -131,7 +131,7 @@ typedef struct ParameterEntity
 {
   unsigned int bufferIdx;
   unsigned int bufferLength;
-  char ** buffer;
+  char (*buffer)[];
   char * (*parameters)[][2];
   unsigned char parameterIdx;
   unsigned char parameterLength;

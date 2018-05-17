@@ -83,6 +83,8 @@ static unsigned int InitializeResourceSearchState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
     void * const sm, const char * data, unsigned int length);
+static unsigned int ParseResourceEnding(
+    void * const sm, const char * data, unsigned int length);
 static unsigned int ParseUrlEncodedFormName(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseUrlEncodedFormValue(
@@ -90,9 +92,6 @@ static unsigned int ParseUrlEncodedFormValue(
 static unsigned int ParseHttpVersion(
     void * const sm, const char * data, unsigned int length);
 
-/* Parse request header parameters                                           */
-/* - used <left> integer paramter array index                                */
-/* - used <right> integer parameter - parameter buffer index                 */
 static unsigned int CheckHeaderEndState(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseParameterNameState(
@@ -134,11 +133,11 @@ static void CompareEngine_Increment(tCompareEntity * const ce);
 static void ParameterEngine_Init(
     tParameterEntity * const pe, char (*buffer)[], char * (*parameters)[][2],
     unsigned int bufferLength, unsigned char parameterLength);
-static void ParameterEngine_AddParameterName(
+static tParameterEngineResult ParameterEngine_AddParameterName(
     tParameterEntity * const pe);
-static void ParameterEngine_AddParameterValue(
+static tParameterEngineResult ParameterEngine_AddParameterValue(
     tParameterEntity * const pe);
-static void ParameterEngine_AddParameterCharacter(
+static tParameterEngineResult ParameterEngine_AddParameterCharacter(
     tParameterEntity * const pe, char ch);
 
 static const tStringWithLength * Utils_GetMethodByIdx(
@@ -389,11 +388,13 @@ static unsigned int ParseMethodState(
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed;
+  unsigned int methodTemp;
   tSearchEngineResult result;
 
+  methodTemp = sm->method;
   if (SEARCH_ENGINE_ONGOING ==
       (result = SearchEngine_Search(
-	 &(sm->shared.search.searchEntity), *data, &(sm->method))))
+	 &(sm->shared.search.searchEntity), *data, &methodTemp)))
     {
       parsed = 1;
     }
@@ -409,6 +410,9 @@ static unsigned int ParseMethodState(
       Utils_MarkError(conn, info);
       parsed = 0;
     }
+
+  /* Number of methods is less than 255 */
+  sm->method = (unsigned char)methodTemp;
 
   return parsed;
 }
@@ -1180,7 +1184,7 @@ static tParameterEngineResult ParameterEngine_AddParameterCharacter(
     }
   else if (pe->bufferIdx == (pe->bufferLength - 1))
     {
-      pe->buffer[pe->bufferIdx] = '\0';
+      (*pe->buffer)[pe->bufferIdx] = '\0';
       ++(pe->bufferIdx);
       result = PARAMETER_ENGINE_BUFFER_FULL;
     }
