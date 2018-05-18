@@ -175,7 +175,7 @@ const tStringWithLength HTTP_VERSION = STRING_WITH_LENGTH("HTTP/1.1\r\n");
 
 const tStringWithLength SP = STRING_WITH_LENGTH(" ");
 const tStringWithLength CRLFwL = STRING_WITH_LENGTH("\r\n"); /* fixme name */
-const tStringWithLength QUESTION_MARK = STRING_WITH_LENGTH(" ");
+const tStringWithLength QUESTION_MARK = STRING_WITH_LENGTH("?");
 
 const char CRLF[] = "\r\n";
 const char const ESCAPE_CHARACTER = '%';
@@ -582,10 +582,10 @@ static unsigned int ParseUrlEncodedFormName(
 
   if ('=' == *data)
     {
-      sm->state = &ParseUrlEncodedFormValue;
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
       ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
+      sm->state = &ParseUrlEncodedFormValue;
       parsed = 1U;
     }
   else if (' ' == *data)
@@ -594,7 +594,7 @@ static unsigned int ParseUrlEncodedFormName(
 	  &(sm->shared.parse.parameterEntity), '\0');
       CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
-      parsed = 1U;
+      parsed = 0U;
     }
   else
     {
@@ -613,10 +613,10 @@ static unsigned int ParseUrlEncodedFormValue(
 
   if ('&' == *data)
     {
-      sm->state = &ParseUrlEncodedFormName;
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
       ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
+      sm->state = &ParseUrlEncodedFormName;
       parsed = 1U;
     }
   else if (' ' == *data)
@@ -625,7 +625,7 @@ static unsigned int ParseUrlEncodedFormValue(
 	  &(sm->shared.parse.parameterEntity), '\0');
       CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
-      parsed = 1U;
+      parsed = 0U;
     }
   else
     {
