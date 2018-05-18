@@ -199,6 +199,7 @@ const char * statuscodes[][2] =
 	{ "403", "Forbidden"},
 	{ "404", "Not Found" },
 	{ "411", "Request-URI Too Long" },
+	{ "431", "Request Header Fields Too Large" },
 	{ "500", "Server fault" },
 	{ "501", "Not Implemented" },
 	{ "505", "Version not supported" }
@@ -714,9 +715,20 @@ static unsigned int ParseParameterNameState(
     }
   else
     {
-      ParameterEngine_AddParameterCharacter(
+      tParameterEngineResult paramResult =
+	  ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), *data);
-      parsed = 1U;
+      if (PARAMETER_ENGINE_OK == paramResult)
+	{
+	  parsed = 1U;
+	}
+      else
+	{
+	  tErrorInfo info;
+	  info.status = HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE;
+	  Utils_MarkError(conn, info);
+	  parsed = 0U;
+	}
     }
 
   return parsed;
@@ -753,9 +765,20 @@ static unsigned int ParseParameterValueState(
         }
       else
         {
-	  ParameterEngine_AddParameterCharacter(
+	  tParameterEngineResult paramResult =
+	      ParameterEngine_AddParameterCharacter(
 	      &(sm->shared.parse.parameterEntity), *data);
-	  parsed = 1U;
+	  if (PARAMETER_ENGINE_OK == paramResult)
+	    {
+	      parsed = 1U;
+	    }
+	  else
+	    {
+	      tErrorInfo info;
+	      info.status = HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE;
+	      Utils_MarkError(conn, info);
+	      parsed = 0U;
+	    }
         }
     }
 

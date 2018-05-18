@@ -54,6 +54,7 @@ typedef enum HttpStatusCode
   HTTP_FORBIDDEN,
   HTTP_STATUS_NOT_FOUND,
   HTTP_STATUS_REQUEST_URI_TOO_LONG,
+  HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE,
   HTTP_STATUS_SERVER_FAULT,
   HTTP_STATUS_NOT_IMPLEMENTED,
   HTTP_VERSION_NOT_IMPLEMENTED
@@ -183,11 +184,7 @@ typedef struct uCHttpServerState
 {
   tSharedArea shared;
   unsigned char method;
-  unsigned char compareIdx; /* resource path limit */
-  unsigned char byte;
   unsigned int resourceIdx;
-  unsigned int left;
-  unsigned int right;
   unsigned int contentLength;
   tParserState state;
   const tResourceEntry (*resources)[]; /* Or set as singleton */
