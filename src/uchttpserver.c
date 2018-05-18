@@ -649,7 +649,6 @@ static unsigned int ParseHttpVersion(
   if (COMPARE_ENGINE_MATCH == result)
     {
       CompareEngine_Init(&(sm->shared.parse.compareEntity));
-      sm->compareIdx = 0;
       sm->state = &CheckHeaderEndState;
       parsed = 1U;
     }
@@ -673,23 +672,26 @@ static unsigned int CheckHeaderEndState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
-  if (2 == sm->compareIdx)
+  unsigned int parsed;
+  tCompareEngineResult result =
+      CompareEngine_Compare(
+	  &(sm->shared.parse.compareEntity), *data, &CRLFwL);
+
+  if (COMPARE_ENGINE_MATCH == result)
     {
       sm->state = &AnalyzeEntityState;
-      parsed = 0;
+      parsed = 1U;
     }
-  else if (CRLF[sm->compareIdx] == *data)
+  else if (COMPARE_ENGINE_ONGOING == result)
     {
-      ++(sm->compareIdx);
-      parsed = 1;
+      CompareEngine_Increment(&(sm->shared.parse.compareEntity));
+      parsed = 1U;
     }
   else
     {
+      ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
       sm->state = &ParseParameterNameState;
-      ParameterEngine_AddParameterName(conn);
-
-      parsed = 0;
+      parsed = 0U;
     }
 
   return parsed;
@@ -699,24 +701,24 @@ static unsigned int ParseParameterNameState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
 
   if (':' == *data)
     {
-      /* Set next state */
-      sm->state = &ParseParameterValueState;
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
       ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
-
-      parsed = 1;
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
+      sm->state = &ParseParameterValueState;
+      parsed = 1U;
     }
   else
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), *data);
-      parsed = 1;
+      parsed = 1U;
     }
+
   return parsed;
 }
 
@@ -724,31 +726,37 @@ static unsigned int ParseParameterValueState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int * bufferIdx = &(sm->right);
-  unsigned int parsed = 0;
+  unsigned int parsed;
+  tCompareEngineResult result =
+      CompareEngine_Compare(
+	  &(sm->shared.parse.compareEntity), *data, &CRLFwL);
 
-  if (2 == sm->compareIdx)
+  if (COMPARE_ENGINE_MATCH == result)
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
-      sm->compareIdx = 0;
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &CheckHeaderEndState;
+      parsed = 1U;
     }
-  else if (*data == CRLF[sm->compareIdx])
+  else if (COMPARE_ENGINE_ONGOING == result)
     {
-      ++(sm->compareIdx);
-      parsed = 1;
-    }
-  else if (' ' == *data || '\t' == *data)
-    {
-      /* Ignore Linear White Space */
-      parsed = 1;
+      CompareEngine_Increment(&(sm->shared.parse.compareEntity));
+      parsed = 1U;
     }
   else
     {
-      ParameterEngine_AddParameterCharacter(
-	  &(sm->shared.parse.parameterEntity), *data);
-      parsed = 1;
+      if (' ' == *data || '\t' == *data)
+        {
+	  /* Ignore Linear White Space */
+	  parsed = 1U;
+        }
+      else
+        {
+	  ParameterEngine_AddParameterCharacter(
+	      &(sm->shared.parse.parameterEntity), *data);
+	  parsed = 1U;
+        }
     }
 
   return parsed;
