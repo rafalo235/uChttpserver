@@ -198,7 +198,8 @@ const char * statuscodes[][2] =
 	{ "400", "Bad Request"},
 	{ "403", "Forbidden"},
 	{ "404", "Not Found" },
-	{ "411", "Request-URI Too Long" },
+	{ "411", "Length Required" },
+	{ "414", "Request-URI Too Long" },
 	{ "431", "Request Header Fields Too Large" },
 	{ "500", "Server fault" },
 	{ "501", "Not Implemented" },
@@ -231,10 +232,7 @@ void Http_Input(tuCHttpServerState * const sm,
   unsigned int parsed;
   while (length ||
       (&CallResourceState == sm->state) ||
-      (&CheckHeaderEndState == sm->state) ||
-      (&AnalyzeEntityState == sm->state) ||
-      (&ParseUrlEncodedEntityName == sm->state) ||
-      (&ParseUrlEncodedEntityValue == sm->state))
+      (&AnalyzeEntityState == sm->state))
     {
       parsed = sm->state(sm, data, length);
       length -= parsed;
@@ -402,11 +400,11 @@ static unsigned int ParseMethodState(
       (result = SearchEngine_Search(
 	 &(sm->shared.search.searchEntity), *data, &methodTemp)))
     {
-      parsed = 1;
+      parsed = 1U;
     }
   else if (SEARCH_ENGINE_FOUND == result)
     {
-      parsed = 1;
+      parsed = 1U;
       sm->state = &PostMethodState;
     }
   else
@@ -414,7 +412,7 @@ static unsigned int ParseMethodState(
       tErrorInfo info;
       info.status = HTTP_STATUS_NOT_IMPLEMENTED;
       Utils_MarkError(conn, info);
-      parsed = 0;
+      parsed = 0U;
     }
 
   /* Number of methods is less than 255 */
@@ -428,22 +426,19 @@ static unsigned int PostMethodState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
-  if (length)
+  unsigned int parsed;
+  if (' ' == *data)
     {
-      if (' ' == *data)
-	{
-	  parsed = 1;
-	  sm->state = &DetectUriState;
-	}
-      else
-	{
-	  /* Space expected */
-	  tErrorInfo info;
-	  info.status = HTTP_BAD_REQUEST;
-	  Utils_MarkError(conn, info);
-	  parsed = 0;
-	}
+      parsed = 1U;
+      sm->state = &DetectUriState;
+    }
+  else
+    {
+      /* Space expected */
+      tErrorInfo info;
+      info.status = HTTP_BAD_REQUEST;
+      Utils_MarkError(conn, info);
+      parsed = 0U;
     }
   return parsed;
 }
@@ -799,52 +794,66 @@ static unsigned int AnalyzeEntityState(
   else if (0 == Utils_SearchNullTerminatedPattern(
       "application/x-www-form-urlencoded", content))
     {
-      sm->state = &ParseUrlEncodedEntityName;
       if (NULL != contentLength)
 	{
 	  sm->contentLength = Utils_AtoiNullTerminated(contentLength);
+	  if (0U < sm->contentLength)
+	    {
+	      ParameterEngine_AddParameterName(
+		  &(sm->shared.parse.parameterEntity));
+	      sm->state = &ParseUrlEncodedEntityName;
+	    }
+	  else
+	    {
+	      tErrorInfo info;
+	      info.status = HTTP_BAD_REQUEST;
+	      Utils_MarkError(conn, info);
+	    }
 	}
       else
 	{
-	  sm->contentLength = 0;
+	  tErrorInfo info;
+	  info.status = HTTP_LENGTH_REQUIRED;
+	  Utils_MarkError(conn, info);
 	}
-      ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
     }
   else
     {
       sm->state = &CallResourceState;
     }
-  return 0;
+  return 0U;
 }
 
 static unsigned int ParseUrlEncodedEntityName(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
 
-  if (0U == sm->contentLength)
+  if (1U == sm->contentLength)
     {
-      sm->state = &CallResourceState;
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
-      parsed = 0U;
+      sm->state = &CallResourceState;
+      parsed = 1U;
     }
   else if ('=' == *data)
     {
-      sm->state = &ParseUrlEncodedEntityValue;
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
       ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
       sm->contentLength--;
-      parsed = 1;
+      sm->state = &ParseUrlEncodedEntityValue;
+      parsed = 1U;
     }
   else
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), *data);
       sm->contentLength--;
-      parsed = 1;
+      parsed = 1U;
     }
 
   return parsed;
@@ -854,30 +863,32 @@ static unsigned int ParseUrlEncodedEntityValue(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  unsigned int parsed = 0;
+  unsigned int parsed;
 
-  if (0U == sm->contentLength)
+  if (1U == sm->contentLength)
     {
-      sm->state = &CallResourceState;
+      ParameterEngine_AddParameterCharacter(
+	  &(sm->shared.parse.parameterEntity), *data);
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
-      parsed = 0U;
+      sm->state = &CallResourceState;
+      parsed = 1U;
     }
   else if ('&' == *data)
     {
-      sm->state = &ParseUrlEncodedEntityName;
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
       ParameterEngine_AddParameterName(&(sm->shared.parse.parameterEntity));
       sm->contentLength--;
-      parsed = 1;
+      sm->state = &ParseUrlEncodedEntityName;
+      parsed = 1U;
     }
   else
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), *data);
       sm->contentLength--;
-      parsed = 1;
+      parsed = 1U;
     }
 
   return parsed;
@@ -891,7 +902,7 @@ static unsigned int CallResourceState(
   (*sm->resources)[sm->resourceIdx].callback(conn);
   /* End of parsing request */
   sm->state = &InitSearchMethodState;
-  return 0;
+  return 0U;
 }
 
 static unsigned int CallErrorCallbackState(
@@ -900,7 +911,7 @@ static unsigned int CallErrorCallbackState(
   tuCHttpServerState * const sm = conn;
   sm->onError(conn, &(sm->shared.errorInfo));
   sm->state = &InitSearchMethodState;
-  return 1; /* fixme maybe length? */
+  return length;
 }
 
 /*****************************************************************************/
