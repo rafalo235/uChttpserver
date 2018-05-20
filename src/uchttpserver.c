@@ -140,6 +140,8 @@ static tParameterEngineResult ParameterEngine_AddParameterValue(
 static tParameterEngineResult ParameterEngine_AddParameterCharacter(
     tParameterEntity * const pe, char ch);
 
+static void ContentEngine_Init(tContentEntity * const contentEntity);
+
 static const tStringWithLength * Utils_GetMethodByIdx(
     const void * arr, unsigned int idx);
 static const tStringWithLength * Utils_GetResourceByIdx(
@@ -368,10 +370,11 @@ void Http_HelperSendParametered(
 
 void Http_HelperFlush(tuCHttpServerState * const sm)
 {
-  if (0 != sm->bufferIdx)
+  if (0U != sm->shared.content.contentEntity.bufferIdx)
     {
-      sm->send(sm, sm->buffer, sm->bufferIdx);
-      sm->bufferIdx = 0;
+      sm->send(sm, sm->shared.content.contentEntity.buffer,
+	       sm->shared.content.contentEntity.bufferIdx);
+      sm->shared.content.contentEntity.bufferIdx = 0;
     }
 }
 
@@ -916,6 +919,11 @@ static unsigned int CallResourceState(
 {
   tuCHttpServerState * const sm = conn;
 
+  if (1U == Utils_OnInitialization(conn))
+    {
+      ContentEngine_Init(&(sm->shared.content.contentEntity));
+    }
+
   (*sm->resources)[sm->resourceIdx].callback(conn);
   /* End of parsing request */
   sm->state = &InitSearchMethodState;
@@ -926,7 +934,13 @@ static unsigned int CallErrorCallbackState(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
-  sm->onError(conn, &(sm->shared.errorInfo));
+
+  if (1U == Utils_OnInitialization(conn))
+    {
+      ContentEngine_Init(&(sm->shared.content.contentEntity));
+    }
+
+  sm->onError(conn, &(sm->shared.content.errorInfo));
   sm->state = &InitSearchMethodState;
   return length;
 }
@@ -1125,7 +1139,7 @@ static const tStringWithLength * Utils_GetResourceByIdx(
 static void Utils_MarkError(void * const conn, tErrorInfo info)
 {
   tuCHttpServerState * const sm = conn;
-  sm->shared.errorInfo = info;
+  sm->shared.content.errorInfo = info;
   sm->state = &CallErrorCallbackState;
 }
 
@@ -1273,6 +1287,11 @@ static tParameterEngineResult ParameterEngine_AddParameterCharacter(
   return result;
 }
 
+static void ContentEngine_Init(tContentEntity * const contentEntity)
+{
+  contentEntity->bufferIdx = 0U;
+}
+
 static void Utils_PrintParameter(
     void * const conn, const char * format, const void * param)
 {
@@ -1300,17 +1319,19 @@ Http_SendPortWrapper(
 
   while (length)
     {
-      if (sm->bufferIdx < HTTP_BUFFER_LENGTH)
+      if (sm->shared.content.contentEntity.bufferIdx < HTTP_BUFFER_LENGTH)
 	{
-	  sm->buffer[sm->bufferIdx] = *data;
+	  sm->shared.content.contentEntity.
+	    buffer[sm->shared.content.contentEntity.bufferIdx] = *data;
 	  ++data;
 	  --length;
-	  ++(sm->bufferIdx);
+	  ++(sm->shared.content.contentEntity.bufferIdx);
 	}
       else
 	{
-	  sm->send(conn, sm->buffer, HTTP_BUFFER_LENGTH);
-	  sm->bufferIdx = 0;
+	  sm->send(conn, sm->shared.content.contentEntity.buffer,
+		   HTTP_BUFFER_LENGTH);
+	  sm->shared.content.contentEntity.bufferIdx = 0U;
 	}
     }
 }

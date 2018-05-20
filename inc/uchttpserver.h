@@ -141,6 +141,16 @@ typedef struct ParameterEntity
 } tParameterEntity;
 
 /*****************************************************************************/
+/* Content entity                                                            */
+/*****************************************************************************/
+
+typedef struct ContentEntity
+{
+  unsigned int bufferIdx;
+  char buffer[HTTP_BUFFER_LENGTH];
+} tContentEntity;
+
+/*****************************************************************************/
 /* Error information                                                         */
 /*****************************************************************************/
 
@@ -174,11 +184,17 @@ typedef struct ParsePhaseArea
   tCompareEntity compareEntity;
 } tParsePhaseArea;
 
+typedef struct ContentPhaseArea
+{
+  tContentEntity contentEntity;
+  tErrorInfo errorInfo;
+} tContentPhaseArea;
+
 typedef union SharedArea
 {
   tSearchPhaseArea search;
   tParsePhaseArea parse;
-  tErrorInfo errorInfo;
+  tContentPhaseArea content;
 } tSharedArea;
 
 typedef struct uCHttpServerState
@@ -194,8 +210,6 @@ typedef struct uCHttpServerState
   tSendCallback send;
   tErrorCallback onError;
   void * context;
-  unsigned int bufferIdx;
-  char buffer[HTTP_BUFFER_LENGTH];
   char parametersBuffer[HTTP_PARAMETERS_BUFFER_LENGTH];
   char * parameters[HTTP_PARAMETERS_MAX][2];
 } tuCHttpServerState;
