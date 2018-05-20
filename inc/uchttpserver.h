@@ -185,6 +185,7 @@ typedef struct uCHttpServerState
 {
   tSharedArea shared;
   unsigned char method;
+  unsigned char initialization;
   unsigned int resourceIdx;
   unsigned int contentLength;
   tParserState state;

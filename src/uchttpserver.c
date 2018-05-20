@@ -79,9 +79,9 @@ static unsigned int DetectUriState(
     void * const sm, const char * data, unsigned int length);
 
 
-static unsigned int InitializeResourceSearchState(
-    void * const sm, const char * data, unsigned int length);
 static unsigned int ParseAbsPathResourceState(
+    void * const sm, const char * data, unsigned int length);
+static unsigned int InitializeParameterEngine(
     void * const sm, const char * data, unsigned int length);
 static unsigned int ParseResourceEnding(
     void * const sm, const char * data, unsigned int length);
@@ -146,6 +146,8 @@ static const tStringWithLength * Utils_GetResourceByIdx(
    const void * arr, unsigned int idx);
 
 static void Utils_MarkError(void * const conn, tErrorInfo info);
+
+static unsigned char Utils_OnInitialization(void * const conn);
 
 static char Utils_ToLowerCase(char input);
 
@@ -224,6 +226,7 @@ Http_InitializeConnection(tuCHttpServerState * const sm,
   sm->resources = resources;
   sm->resourcesLength = reslen;
   sm->context = context;
+  sm->initialization = 1U;
 }
 
 void Http_Input(tuCHttpServerState * const sm,
@@ -234,9 +237,18 @@ void Http_Input(tuCHttpServerState * const sm,
       (&CallResourceState == sm->state) ||
       (&AnalyzeEntityState == sm->state))
     {
+      tParserState previous = sm->state;
       parsed = sm->state(sm, data, length);
       length -= parsed;
       data += parsed;
+      if (previous != sm->state)
+	{
+	  sm->initialization = 1U;
+	}
+      else
+	{
+	  sm->initialization = 0U;
+	}
     }
 }
 
@@ -452,7 +464,7 @@ static unsigned int DetectUriState(
       if ('/' == *data)
 	{
 	  /* Most common - abs_path */
-	  sm->state = &InitializeResourceSearchState;
+	  sm->state = &ParseAbsPathResourceState;
 	}
       else if ('*' == *data)
 	{
@@ -470,22 +482,7 @@ static unsigned int DetectUriState(
 	}
     }
 
-  return 0;
-}
-
-static unsigned int InitializeResourceSearchState(
-    void * const conn, const char * data, unsigned int length)
-{
-  tuCHttpServerState * const sm = conn;
-  SearchEngine_Init(&(sm->shared.search.searchEntity),
-		    sm->resources,
-		    sm->resourcesLength,
-		    &Utils_GetResourceByIdx,
-		    sm->parametersBuffer,
-		    (unsigned char)(HTTP_PARAMETERS_BUFFER_LENGTH > 255U ?
-			255U : HTTP_PARAMETERS_BUFFER_LENGTH));
-  sm->state = &ParseAbsPathResourceState;
-  return 0;
+  return 0U;
 }
 
 static unsigned int ParseAbsPathResourceState(
@@ -495,6 +492,17 @@ static unsigned int ParseAbsPathResourceState(
   unsigned int parsed;
   tSearchEngineResult result;
 
+  if (1U == Utils_OnInitialization(conn))
+    {
+      SearchEngine_Init(&(sm->shared.search.searchEntity),
+    		    sm->resources,
+    		    sm->resourcesLength,
+    		    &Utils_GetResourceByIdx,
+    		    sm->parametersBuffer,
+    		    (unsigned char)(HTTP_PARAMETERS_BUFFER_LENGTH > 255U ?
+    			255U : HTTP_PARAMETERS_BUFFER_LENGTH));
+    }
+
   if (SEARCH_ENGINE_ONGOING ==
       (result = SearchEngine_Search(
 	 &(sm->shared.search.searchEntity), *data, &(sm->resourceIdx))))
@@ -503,13 +511,7 @@ static unsigned int ParseAbsPathResourceState(
     }
   else if (SEARCH_ENGINE_FOUND == result)
     {
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
-      ParameterEngine_Init(&(sm->shared.parse.parameterEntity),
-			   &(sm->parametersBuffer),
-			   &(sm->parameters),
-			   HTTP_PARAMETERS_BUFFER_LENGTH,
-			   HTTP_PARAMETERS_MAX);
-      sm->state = &ParseResourceEnding;
+      sm->state = &InitializeParameterEngine;
       parsed = 1U;
     }
   else if (SEARCH_ENGINE_NOT_FOUND == result)
@@ -530,33 +532,35 @@ static unsigned int ParseAbsPathResourceState(
   return parsed;
 }
 
+static unsigned int InitializeParameterEngine(
+    void * const conn, const char * data, unsigned int length)
+{
+  tuCHttpServerState * const sm = conn;
+  /* Prepare parameters engine - before url-encoded-form */
+  ParameterEngine_Init(&(sm->shared.parse.parameterEntity),
+			   &(sm->parametersBuffer),
+			   &(sm->parameters),
+			   HTTP_PARAMETERS_BUFFER_LENGTH,
+			   HTTP_PARAMETERS_MAX);
+  sm->state = &ParseResourceEnding;
+  return 0U;
+}
+
+
 static unsigned int ParseResourceEnding(
     void * const conn, const char * data, unsigned int length)
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed;
-  tCompareEngineResult spaceResult =
-      CompareEngine_Compare(
-	  &(sm->shared.parse.compareEntity), *data, &SP);
-  tCompareEngineResult questionMarkResult =
-      CompareEngine_Compare(
-	  &(sm->shared.parse.compareEntity), *data, &QUESTION_MARK);
 
-  if (COMPARE_ENGINE_MATCH == spaceResult)
+  if (' ' == *data)
     {
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseHttpVersion;
       parsed = 1U;
     }
-  else if (COMPARE_ENGINE_MATCH == questionMarkResult)
+  else if ('?' == *data)
     {
       sm->state = &ParseUrlEncodedFormName;
-      parsed = 1U;
-    }
-  else if ((COMPARE_ENGINE_ONGOING != spaceResult) ||
-      (COMPARE_ENGINE_ONGOING != questionMarkResult))
-    {
-      CompareEngine_Increment(&(sm->shared.parse.compareEntity));
       parsed = 1U;
     }
   else
@@ -588,7 +592,6 @@ static unsigned int ParseUrlEncodedFormName(
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
       parsed = 0U;
     }
@@ -619,7 +622,6 @@ static unsigned int ParseUrlEncodedFormValue(
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseResourceEnding;
       parsed = 0U;
     }
@@ -638,13 +640,18 @@ static unsigned int ParseHttpVersion(
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed;
-  tCompareEngineResult result =
-      CompareEngine_Compare(
-	  &(sm->shared.parse.compareEntity), *data, &HTTP_VERSION);
+  tCompareEngineResult result;
+
+  if (1U == Utils_OnInitialization(conn))
+    {
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
+    }
+
+  result = CompareEngine_Compare(
+  	  &(sm->shared.parse.compareEntity), *data, &HTTP_VERSION);
 
   if (COMPARE_ENGINE_MATCH == result)
     {
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &CheckHeaderEndState;
       parsed = 1U;
     }
@@ -669,9 +676,15 @@ static unsigned int CheckHeaderEndState(
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed;
-  tCompareEngineResult result =
-      CompareEngine_Compare(
-	  &(sm->shared.parse.compareEntity), *data, &CRLFwL);
+  tCompareEngineResult result;
+
+  if (1U == Utils_OnInitialization(conn))
+    {
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
+    }
+
+  result = CompareEngine_Compare(
+  	  &(sm->shared.parse.compareEntity), *data, &CRLFwL);
 
   if (COMPARE_ENGINE_MATCH == result)
     {
@@ -704,7 +717,6 @@ static unsigned int ParseParameterNameState(
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
       ParameterEngine_AddParameterValue(&(sm->shared.parse.parameterEntity));
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &ParseParameterValueState;
       parsed = 1U;
     }
@@ -734,15 +746,20 @@ static unsigned int ParseParameterValueState(
 {
   tuCHttpServerState * const sm = conn;
   unsigned int parsed;
-  tCompareEngineResult result =
-      CompareEngine_Compare(
-	  &(sm->shared.parse.compareEntity), *data, &CRLFwL);
+  tCompareEngineResult result;
+
+  if (1U == Utils_OnInitialization(conn))
+    {
+      CompareEngine_Init(&(sm->shared.parse.compareEntity));
+    }
+
+  result = CompareEngine_Compare(
+  	  &(sm->shared.parse.compareEntity), *data, &CRLFwL);
 
   if (COMPARE_ENGINE_MATCH == result)
     {
       ParameterEngine_AddParameterCharacter(
 	  &(sm->shared.parse.parameterEntity), '\0');
-      CompareEngine_Init(&(sm->shared.parse.compareEntity));
       sm->state = &CheckHeaderEndState;
       parsed = 1U;
     }
@@ -1110,6 +1127,12 @@ static void Utils_MarkError(void * const conn, tErrorInfo info)
   tuCHttpServerState * const sm = conn;
   sm->shared.errorInfo = info;
   sm->state = &CallErrorCallbackState;
+}
+
+static unsigned char Utils_OnInitialization(void * const conn)
+{
+  tuCHttpServerState * const sm = conn;
+  return sm->initialization;
 }
 
 static char Utils_ToLowerCase(char input)
