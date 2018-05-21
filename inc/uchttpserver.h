@@ -30,21 +30,15 @@
 #ifndef UCHTTPSERVER_H_
 #define UCHTTPSERVER_H_
 
-#ifndef NULL
-#define NULL ((void*)0)
-#endif
+/*****************************************************************************/
+/* Includes                                                                  */
+/*****************************************************************************/
 
-#ifndef HTTP_BUFFER_LENGTH
-#define HTTP_BUFFER_LENGTH (256)
-#endif
+#include "uchttpoption.h"
 
-#ifndef HTTP_PARAMETERS_BUFFER_LENGTH
-#define HTTP_PARAMETERS_BUFFER_LENGTH (640)
-#endif
-
-#ifndef HTTP_PARAMETERS_MAX
-#define HTTP_PARAMETERS_MAX (16)
-#endif
+/*****************************************************************************/
+/* Type definitions                                                          */
+/*****************************************************************************/
 
 typedef enum HttpStatusCode
 {
