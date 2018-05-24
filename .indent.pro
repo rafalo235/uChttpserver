@@ -1,0 +1,54 @@
+--blank-lines-after-declarations
+--blank-lines-after-procedures
+--no-blank-lines-before-block-comments
+--braces-after-if-line
+--braces-after-func-def-line
+--brace-indent0
+--braces-after-struct-decl-line
+--break-after-boolean-operator
+--break-function-decl-args
+--case-indentation0
+--case-brace-indentation0
+--no-comment-delimiters-on-blank-lines
+--comment-indentation33 /* todo? */
+--dont-line-up-parentheses
+--dont-cuddle-do-while
+--dont-cuddle-else
+--dont-format-comments
+--continuation-indentation4
+--declaration-comment-column33 /* todo? */
+--declaration-indentation2
+--dont-break-procedure-type
+--dont-left-justify-declarations
+--dont-space-special-semicolon
+--dont-star-comments
+--ignore-newlines
+--indent-level2
+--swallow-optional-blank-lines
+--remove-preprocessor-space
+--no-blank-lines-after-commas
+--parameter-indentation1
+--space-after-if
+--no-space-after-parentheses
+--space-after-while
+--no-space-after-function-call-names
+--space-after-for
+--no-tabs
+/*--preserve-mtime*/
+--verbose
+-T tuCHttpServerState
+-T tSearchEngineResult
+-T tCompareEngineResult
+-T tParameterEngineResult
+-T tHttpStatusCode
+-T tHttpMethod
+-T tStringWithLength
+-T tResourceCallback
+-T tResourceEntry
+-T tGetElementByIdxCallback
+-T tSearchEntity
+-T tCompareEntity
+-T tParameterEntity
+-T tContentEntity
+-T tErrorInfo
+-T tSendCallback

@@ -31,7 +31,9 @@
 #include <stdio.h>
 
 unsigned int Http_SendPort(
-    void * const  conn, const char * data, unsigned int length)
+    void *const conn,
+    const char *data,
+    unsigned int length)
 {
   fwrite(data, 1, length, stdout);
   fflush(stdout);
@@ -39,7 +41,8 @@ unsigned int Http_SendPort(
 }
 
 void Http_ErrorPort(
-    void * const conn, const tErrorInfo * errorInfo)
+    void *const conn,
+    const tErrorInfo *errorInfo)
 {
   fprintf(stdout, "Error %u occured\n", errorInfo->status);
   fflush(stdout);

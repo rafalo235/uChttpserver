@@ -83,7 +83,9 @@ typedef struct StringWithLength
 /* Resources                                                                 */
 /*****************************************************************************/
 
-typedef tHttpStatusCode (*tResourceCallback)(void * const);
+typedef tHttpStatusCode (
+    *tResourceCallback) (
+    void *const);
 
 typedef struct ResourceEntry
 {
@@ -95,13 +97,15 @@ typedef struct ResourceEntry
 /* Search entity                                                             */
 /*****************************************************************************/
 
-typedef const tStringWithLength *
-    (*tGetElementByIdxCallback)(const void *, unsigned int);
+typedef const tStringWithLength *(
+    *tGetElementByIdxCallback) (
+    const void *,
+    unsigned int);
 
 typedef struct SearchEntity
 {
-  const void * array;
-  char * buffer;
+  const void *array;
+  char *buffer;
   unsigned int length;
   unsigned int left;
   unsigned int right;
@@ -128,8 +132,10 @@ typedef struct ParameterEntity
 {
   unsigned int bufferIdx;
   unsigned int bufferLength;
-  char (*buffer)[];
-  char * (*parameters)[][2];
+  char (
+      *buffer)[];
+  char *(
+      *parameters)[][2];
   unsigned char parameterIdx;
   unsigned char parameterLength;
 } tParameterEntity;
@@ -157,14 +163,22 @@ typedef struct ErrorInfo
 /* General inteface                                                          */
 /*****************************************************************************/
 
-typedef unsigned int (*tSendCallback)(
-    void * const conn, const char * data, unsigned int length);
+typedef unsigned int (
+    *tSendCallback) (
+    void *const conn,
+    const char *data,
+    unsigned int length);
 
-typedef void (*tErrorCallback)(
-    void * const conn, const tErrorInfo * errorInfo);
+typedef void (
+    *tErrorCallback) (
+    void *const conn,
+    const tErrorInfo *errorInfo);
 
-typedef unsigned int (*tParserState)(void * const,
-    const char * data, unsigned int length);
+typedef unsigned int (
+    *tParserState) (
+    void *const,
+    const char *data,
+    unsigned int length);
 
 typedef struct SearchPhaseArea
 {
@@ -199,13 +213,14 @@ typedef struct uCHttpServerState
   unsigned int resourceIdx;
   unsigned int contentLength;
   tParserState state;
-  const tResourceEntry (*resources)[]; /* Or set as singleton */
+  const tResourceEntry (
+      *resources)[];            /* Or set as singleton */
   unsigned int resourcesLength;
   tSendCallback send;
   tErrorCallback onError;
-  void * context;
+  void *context;
   char parametersBuffer[HTTP_PARAMETERS_BUFFER_LENGTH];
-  char * parameters[HTTP_PARAMETERS_MAX][2];
+  char *parameters[HTTP_PARAMETERS_MAX][2];
 } tuCHttpServerState;
 
 /*****************************************************************************/
@@ -217,54 +232,69 @@ typedef struct uCHttpServerState
  * Must be called once per connection before any
  * processing
  */
-void
-Http_InitializeConnection(tuCHttpServerState * const sm,
-			  tSendCallback send,
-			  tErrorCallback onError,
-			  const tResourceEntry (*resources)[],
-			  unsigned int reslen,
-			  void * context);
+void Http_InitializeConnection(
+    tuCHttpServerState *const sm,
+    tSendCallback send,
+    tErrorCallback onError,
+    const tResourceEntry (*resources)[],
+    unsigned int reslen,
+    void *context);
 
 /**
  * \brief Entry point for input stream processing
  */
-void
-Http_Input(tuCHttpServerState * const sm,
-	   const char * data, unsigned int length);
+void Http_Input(
+    tuCHttpServerState *const sm,
+    const char *data,
+    unsigned int length);
 
 /*****************************************************************************/
 /* Helper API                                                                */
 /*****************************************************************************/
 
-tHttpMethod Http_HelperGetMethod(tuCHttpServerState * const sm);
+tHttpMethod Http_HelperGetMethod(
+    tuCHttpServerState *const sm);
 
-void * Http_HelperGetContext(tuCHttpServerState * const sm);
+void *Http_HelperGetContext(
+    tuCHttpServerState *const sm);
 
-const char * Http_HelperGetParameter(
-    tuCHttpServerState * const sm, const char * param);
+const char *Http_HelperGetParameter(
+    tuCHttpServerState *const sm,
+    const char *param);
 
 void Http_HelperSendStatusLine(
-    tuCHttpServerState * const sm, tHttpStatusCode code);
+    tuCHttpServerState *const sm,
+    tHttpStatusCode code);
 
 void Http_HelperSendHeaderLine(
-    tuCHttpServerState * const sm, const char * name, const char * value);
+    tuCHttpServerState *const sm,
+    const char *name,
+    const char *value);
 
-void Http_HelperSendCRLF(tuCHttpServerState * const sm);
+void Http_HelperSendCRLF(
+    tuCHttpServerState *const sm);
 
 void Http_HelperSendMessageBody(
-    tuCHttpServerState * const sm, const char * body);
+    tuCHttpServerState *const sm,
+    const char *body);
 
 void Http_HelperSendMessageBodyParametered(
-    tuCHttpServerState * const sm,
-    const char * body, const void * const * param);
+    tuCHttpServerState *const sm,
+    const char *body,
+    const void *const *param);
 
 void Http_HelperSend(
-    tuCHttpServerState * const sm, const char * data, unsigned int length);
+    tuCHttpServerState *const sm,
+    const char *data,
+    unsigned int length);
 
 void Http_HelperSendParametered(
-    tuCHttpServerState * const sm, const char * data, unsigned int length,
-    const void * const * param);
+    tuCHttpServerState *const sm,
+    const char *data,
+    unsigned int length,
+    const void *const *param);
 
-void Http_HelperFlush(tuCHttpServerState * const sm);
+void Http_HelperFlush(
+    tuCHttpServerState *const sm);
 
 #endif /* UCHTTPSERVER_H_ */

@@ -33,50 +33,61 @@
 /* Resource callbacks                                                        */
 /* - of course it could be global, it's up to your needs                     */
 /*****************************************************************************/
-static tHttpStatusCode AaaCallback(void *const);
-static tHttpStatusCode AbaCallback(void *const);
-static tHttpStatusCode AbbCallback(void *const);
-static tHttpStatusCode AbcCallback(void *const);
-static tHttpStatusCode BbbCallback(void *const);
-static tHttpStatusCode CbbCallback(void *const);
-static tHttpStatusCode CccCallback(void *const);
-static tHttpStatusCode CeeeCallback(void *const);
-static tHttpStatusCode FaviconCallback(void * const);
-static tHttpStatusCode IndexCallback(void * const);
+static tHttpStatusCode AaaCallback(
+    void *const);
+static tHttpStatusCode AbaCallback(
+    void *const);
+static tHttpStatusCode AbbCallback(
+    void *const);
+static tHttpStatusCode AbcCallback(
+    void *const);
+static tHttpStatusCode BbbCallback(
+    void *const);
+static tHttpStatusCode CbbCallback(
+    void *const);
+static tHttpStatusCode CccCallback(
+    void *const);
+static tHttpStatusCode CeeeCallback(
+    void *const);
+static tHttpStatusCode FaviconCallback(
+    void *const);
+static tHttpStatusCode IndexCallback(
+    void *const);
 
 /*****************************************************************************/
 /* Resources table                                                           */
 /* - !the resource names must be sorted! - table is looked up with binary se-*/
 /*   arch, inserting resources with includes might be helpful here           */
 /*****************************************************************************/
-const tResourceEntry resources[] =
-    {
-	{ STRING_WITH_LENGTH("/aaa"), &AaaCallback },
-	{ STRING_WITH_LENGTH("/aba"), &AbaCallback },
-	{ STRING_WITH_LENGTH("/abb"), &AbbCallback },
-	{ STRING_WITH_LENGTH("/abc"), &AbcCallback },
-	{ STRING_WITH_LENGTH("/bbb"), &BbbCallback },
-	{ STRING_WITH_LENGTH("/cbb"), &CbbCallback },
-	{ STRING_WITH_LENGTH("/ccc"), &CccCallback },
-	{ STRING_WITH_LENGTH("/ceee"), &CeeeCallback },
-	{ STRING_WITH_LENGTH("/favicon"), &FaviconCallback },
-	{ STRING_WITH_LENGTH("/index.html"), &IndexCallback }
-    };
+const tResourceEntry resources[] = {
+  {STRING_WITH_LENGTH("/aaa"), &AaaCallback},
+  {STRING_WITH_LENGTH("/aba"), &AbaCallback},
+  {STRING_WITH_LENGTH("/abb"), &AbbCallback},
+  {STRING_WITH_LENGTH("/abc"), &AbcCallback},
+  {STRING_WITH_LENGTH("/bbb"), &BbbCallback},
+  {STRING_WITH_LENGTH("/cbb"), &CbbCallback},
+  {STRING_WITH_LENGTH("/ccc"), &CccCallback},
+  {STRING_WITH_LENGTH("/ceee"), &CeeeCallback},
+  {STRING_WITH_LENGTH("/favicon"), &FaviconCallback},
+  {STRING_WITH_LENGTH("/index.html"), &IndexCallback}
+};
 
 /*****************************************************************************/
 /* Resource callback implementation                                          */
 /* - use helper functions to prepare response, buffering is limited because  */
 /*   of microcontroller environment usually suffers lack of memory           */
 /*****************************************************************************/
-static tHttpStatusCode FaviconCallback(void * const a)
+static tHttpStatusCode FaviconCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode IndexCallback(void * const a)
+static tHttpStatusCode IndexCallback(
+    void *const a)
 {
-  const char * helloWorld = "Hello world";
-  const void * const * parameters = { (const void *)&helloWorld };
+  const char *helloWorld = "Hello world";
+  const void *const *parameters = { (const void *) &helloWorld };
 
   /* FIXME connection struct */
   Http_HelperSendStatusLine(&connection, HTTP_STATUS_OK);
@@ -84,56 +95,58 @@ static tHttpStatusCode IndexCallback(void * const a)
   Http_HelperSendHeaderLine(&connection, "Connection", "close");
   Http_HelperSendCRLF(&connection);
   Http_HelperSendMessageBodyParametered(&connection,
-    "<html>"
-    "<head>"
-    "<meta http-equiv=\"Refresh\" content=\"1\" />"
-    "</head>"
-    "<body>"
-    "<h1>Welcome to uCHttpServer!</h1>"
-    "%s from uCHttpServer!"
-    "</body>"
-    "</html>", parameters);
+      "<html>" "<head>" "<meta http-equiv=\"Refresh\" content=\"1\" />"
+      "</head>" "<body>" "<h1>Welcome to uCHttpServer!</h1>"
+      "%s from uCHttpServer!" "</body>" "</html>", parameters);
   Http_HelperFlush(&connection);
 
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AaaCallback(void *const a)
+static tHttpStatusCode AaaCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AbaCallback(void *const a)
+static tHttpStatusCode AbaCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AbbCallback(void *const a)
+static tHttpStatusCode AbbCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode AbcCallback(void *const a)
+static tHttpStatusCode AbcCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode BbbCallback(void *const a)
+static tHttpStatusCode BbbCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode CbbCallback(void *const a)
+static tHttpStatusCode CbbCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode CccCallback(void *const a)
+static tHttpStatusCode CccCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
 
-static tHttpStatusCode CeeeCallback(void *const a)
+static tHttpStatusCode CeeeCallback(
+    void *const a)
 {
   return HTTP_STATUS_OK;
 }
