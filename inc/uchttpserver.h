@@ -141,14 +141,35 @@ typedef struct ParameterEntity
 } tParameterEntity;
 
 /*****************************************************************************/
-/* Content entity                                                            */
+/* Response entity                                                           */
 /*****************************************************************************/
 
-typedef struct ContentEntity
+typedef enum TransferType
 {
+  TRANSFER_TYPE_DEFAULT,
+  TRANSFER_TYPE_CHUNKED,
+  TRANSFER_TYPE_LENGTH_BASED
+} tTransferType;
+
+typedef unsigned int (
+    *tSendEntityFunction) (
+    void *const,
+    const void *,
+    unsigned int);
+
+typedef void (
+    *tFlushEntityFunction) (
+    void *const);
+
+typedef struct ResponseEntity
+{
+  void *server;
+  tSendEntityFunction send;
+  tFlushEntityFunction flush;
+  tTransferType type;
   unsigned int bufferIdx;
   char buffer[HTTP_BUFFER_LENGTH];
-} tContentEntity;
+} tResponseEntity;
 
 /*****************************************************************************/
 /* Error information                                                         */
@@ -194,8 +215,8 @@ typedef struct ParsePhaseArea
 
 typedef struct ContentPhaseArea
 {
-  tContentEntity contentEntity;
   tErrorInfo errorInfo;
+  tResponseEntity responseEntity;
 } tContentPhaseArea;
 
 typedef union SharedArea
@@ -262,11 +283,11 @@ const char *Http_HelperGetParameter(
     tuCHttpServerState *const sm,
     const char *param);
 
-void Http_HelperSendStatusLine(
+void Http_HelperSetResponseStatus(
     tuCHttpServerState *const sm,
     tHttpStatusCode code);
 
-void Http_HelperSendHeaderLine(
+void Http_HelperSetResponseHeader(
     tuCHttpServerState *const sm,
     const char *name,
     const char *value);

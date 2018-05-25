@@ -149,52 +149,59 @@ static unsigned int CallErrorCallbackState(
 /*****************************************************************************/
 
 static void SearchEngine_Init(
-    tSearchEntity * const se,
+    tSearchEntity *const se,
     const void *array,
     unsigned int length,
     tGetElementByIdxCallback getElementByIdx,
     char *buffer,
     unsigned char bufferLength);
 static void SearchEngine_Reset(
-    tSearchEntity * const conn);
+    tSearchEntity *const conn);
 static int SearchEngine_Finished(
-    tSearchEntity * const conn);
+    tSearchEntity *const conn);
 static int SearchEngine_Compare(
     char a,
     char b);
 static int SearchEngine_CopyInput(
-    tSearchEntity * const conn,
+    tSearchEntity *const conn,
     char input);
 static tSearchEngineResult SearchEngine_Search(
-    tSearchEntity * const conn,
+    tSearchEntity *const conn,
     char input,
     unsigned int *idx);
 
 static void CompareEngine_Init(
-    tCompareEntity * const ce);
+    tCompareEntity *const ce);
 static tCompareEngineResult CompareEngine_Compare(
-    tCompareEntity * const ce,
+    tCompareEntity *const ce,
     char input,
-    const tStringWithLength * pattern);
+    const tStringWithLength *pattern);
 static void CompareEngine_Increment(
-    tCompareEntity * const ce);
+    tCompareEntity *const ce);
+
+static void ResponseEngine_Init(
+    tResponseEntity * const re,
+    void *server);
+static unsigned int ResponseEntity_SendBuffered(
+    void *const ptr,
+    const void *data,
+    unsigned int length);
+static void ResponseEntity_FlushBuffered(
+    void *const ptr);
 
 static void ParameterEngine_Init(
-    tParameterEntity * const pe,
+    tParameterEntity *const pe,
     char (*buffer)[],
     char *(*parameters)[][2],
     unsigned int bufferLength,
     unsigned char parameterLength);
 static tParameterEngineResult ParameterEngine_AddParameterName(
-    tParameterEntity * const pe);
+    tParameterEntity *const pe);
 static tParameterEngineResult ParameterEngine_AddParameterValue(
-    tParameterEntity * const pe);
+    tParameterEntity *const pe);
 static tParameterEngineResult ParameterEngine_AddParameterCharacter(
-    tParameterEntity * const pe,
+    tParameterEntity *const pe,
     char ch);
-
-static void ContentEngine_Init(
-    tContentEntity * const contentEntity);
 
 static const tStringWithLength *Utils_GetMethodByIdx(
     const void *arr,
@@ -283,10 +290,10 @@ const char *statuscodes[][2] = {
 /*****************************************************************************/
 
 void Http_InitializeConnection(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     tSendCallback send,
     tErrorCallback onError,
-    const tResourceEntry(*resources)[],
+    const tResourceEntry (*resources)[],
     unsigned int reslen,
     void *context)
 {
@@ -300,7 +307,7 @@ void Http_InitializeConnection(
 }
 
 void Http_Input(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     const char *data,
     unsigned int length)
 {
@@ -330,19 +337,19 @@ void Http_Input(
 /*****************************************************************************/
 
 tHttpMethod Http_HelperGetMethod(
-    tuCHttpServerState * const sm)
+    tuCHttpServerState *const sm)
 {
   return (tHttpMethod) sm->method;
 }
 
 void *Http_HelperGetContext(
-    tuCHttpServerState * const sm)
+    tuCHttpServerState *const sm)
 {
   return sm->context;
 }
 
 const char *Http_HelperGetParameter(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     const char *param)
 {
   unsigned int i;
@@ -365,8 +372,8 @@ const char *Http_HelperGetParameter(
   return result;
 }
 
-void Http_HelperSendStatusLine(
-    tuCHttpServerState * const sm,
+void Http_HelperSetResponseStatus(
+    tuCHttpServerState *const sm,
     tHttpStatusCode code)
 {
   Http_SendNullTerminatedPortWrapper(sm, "HTTP/1.1 ");
@@ -376,8 +383,8 @@ void Http_HelperSendStatusLine(
   Http_SendNullTerminatedPortWrapper(sm, CRLF);
 }
 
-void Http_HelperSendHeaderLine(
-    tuCHttpServerState * const sm,
+void Http_HelperSetResponseHeader(
+    tuCHttpServerState *const sm,
     const char *name,
     const char *value)
 {
@@ -388,20 +395,20 @@ void Http_HelperSendHeaderLine(
 }
 
 void Http_HelperSendCRLF(
-    tuCHttpServerState * const sm)
+    tuCHttpServerState *const sm)
 {
   Http_SendNullTerminatedPortWrapper(sm, CRLF);
 }
 
 void Http_HelperSendMessageBody(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     const char *body)
 {
   Http_SendNullTerminatedPortWrapper(sm, body);
 }
 
 void Http_HelperSendMessageBodyParametered(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     const char *body,
     const void *const *param)
 {
@@ -422,7 +429,7 @@ void Http_HelperSendMessageBodyParametered(
 }
 
 void Http_HelperSend(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     const char *data,
     unsigned int length)
 {
@@ -430,7 +437,7 @@ void Http_HelperSend(
 }
 
 void Http_HelperSendParametered(
-    tuCHttpServerState * const sm,
+    tuCHttpServerState *const sm,
     const char *data,
     unsigned int length,
     const void *const *param)
@@ -454,14 +461,10 @@ void Http_HelperSendParametered(
 }
 
 void Http_HelperFlush(
-    tuCHttpServerState * const sm)
+    tuCHttpServerState *const sm)
 {
-  if (0U != sm->shared.content.contentEntity.bufferIdx)
-  {
-    sm->send(sm, sm->shared.content.contentEntity.buffer,
-        sm->shared.content.contentEntity.bufferIdx);
-    sm->shared.content.contentEntity.bufferIdx = 0;
-  }
+  sm->shared.content.responseEntity.flush(&(sm->shared.content.
+          responseEntity));
 }
 
 /*****************************************************************************/
@@ -840,8 +843,8 @@ static unsigned int ParseParameterNameState(
   else
   {
     tParameterEngineResult paramResult =
-        ParameterEngine_AddParameterCharacter(&(sm->shared.parse.
-            parameterEntity), *data);
+        ParameterEngine_AddParameterCharacter(&(sm->shared.
+            parse.parameterEntity), *data);
     if (PARAMETER_ENGINE_OK == paramResult)
     {
       parsed = 1U;
@@ -899,8 +902,8 @@ static unsigned int ParseParameterValueState(
     else
     {
       tParameterEngineResult paramResult =
-          ParameterEngine_AddParameterCharacter(&(sm->shared.parse.
-              parameterEntity), *data);
+          ParameterEngine_AddParameterCharacter(&(sm->shared.
+              parse.parameterEntity), *data);
       if (PARAMETER_ENGINE_OK == paramResult)
       {
         parsed = 1U;
@@ -1050,7 +1053,7 @@ static unsigned int CallResourceState(
 
   if (1U == Utils_OnInitialization(conn))
   {
-    ContentEngine_Init(&(sm->shared.content.contentEntity));
+    ResponseEngine_Init(&(sm->shared.content.responseEntity), sm);
   }
 
   (*sm->resources)[sm->resourceIdx].callback(conn);
@@ -1068,7 +1071,7 @@ static unsigned int CallErrorCallbackState(
 
   if (1U == Utils_OnInitialization(conn))
   {
-    ContentEngine_Init(&(sm->shared.content.contentEntity));
+    ResponseEngine_Init(&(sm->shared.content.responseEntity), sm);
   }
 
   sm->onError(conn, &(sm->shared.content.errorInfo));
@@ -1085,7 +1088,7 @@ static unsigned int CallErrorCallbackState(
 /*****************************************************************************/
 
 static void SearchEngine_Init(
-    tSearchEntity * const se,
+    tSearchEntity *const se,
     const void *array,
     unsigned int length,
     tGetElementByIdxCallback getElementByIdx,
@@ -1104,13 +1107,13 @@ static void SearchEngine_Init(
 }
 
 static void SearchEngine_Reset(
-    tSearchEntity * const se)
+    tSearchEntity *const se)
 {
   se->compareIdx = 0U;
 }
 
 static int SearchEngine_Finished(
-    tSearchEntity * const se)
+    tSearchEntity *const se)
 {
   int result = 0;
 
@@ -1143,7 +1146,7 @@ static int SearchEngine_Compare(
 }
 
 static int SearchEngine_CopyInput(
-    tSearchEntity * const se,
+    tSearchEntity *const se,
     char input)
 {
   unsigned int result = 0;
@@ -1159,7 +1162,7 @@ static int SearchEngine_CopyInput(
 }
 
 static tSearchEngineResult SearchEngine_Search(
-    tSearchEntity * const se,
+    tSearchEntity *const se,
     char input,
     unsigned int *idx)
 {
@@ -1220,7 +1223,7 @@ static tSearchEngineResult SearchEngine_Search(
           }
         }
       }
-    } /* Process all available chars */
+    }                           /* Process all available chars */
     while ((se->compareIdx < se->bufferIdx) &&
         SEARCH_ENGINE_ONGOING == result);
   }
@@ -1229,15 +1232,15 @@ static tSearchEngineResult SearchEngine_Search(
 }
 
 static void CompareEngine_Init(
-    tCompareEntity * const ce)
+    tCompareEntity *const ce)
 {
   ce->compareIdx = 0U;
 }
 
 static tCompareEngineResult CompareEngine_Compare(
-    tCompareEntity * const ce,
+    tCompareEntity *const ce,
     char input,
-    const tStringWithLength * pattern)
+    const tStringWithLength *pattern)
 {
   tCompareEngineResult result;
 
@@ -1264,16 +1267,70 @@ static tCompareEngineResult CompareEngine_Compare(
 }
 
 static void CompareEngine_Increment(
-    tCompareEntity * const ce)
+    tCompareEntity *const ce)
 {
   ++(ce->compareIdx);
+}
+
+static void ResponseEngine_Init(
+    tResponseEntity * const re,
+    void *server)
+{
+  re->server = server;
+  re->send = &ResponseEntity_SendBuffered;
+  re->flush = &ResponseEntity_FlushBuffered;
+  re->type = TRANSFER_TYPE_DEFAULT;
+  re->bufferIdx = 0U;
+}
+
+static unsigned int ResponseEntity_SendBuffered(
+    void *const ptr,
+    const void *data,
+    unsigned int length)
+{
+  tResponseEntity *const re = ptr;
+  tuCHttpServerState *server = re->server;
+  const char *text = data;
+  unsigned int sent = 0U;
+
+  while (length)
+  {
+    if (re->bufferIdx < HTTP_BUFFER_LENGTH)
+    {
+      re->buffer[re->bufferIdx] = *text;
+      ++text;
+      --length;
+      ++(re->bufferIdx);
+      ++sent;
+    }
+    else
+    {
+      server->send(re->server, re->buffer, HTTP_BUFFER_LENGTH);
+      re->bufferIdx = 0U;
+    }
+  }
+
+  return sent;
+}
+
+static void ResponseEntity_FlushBuffered(
+    void *const ptr)
+{
+  tResponseEntity *const re = ptr;
+  tuCHttpServerState *server = re->server;
+
+  if (0U < re->bufferIdx)
+  {
+    server->send(re->server, re->buffer, re->bufferIdx);
+    re->bufferIdx = 0U;
+  }
 }
 
 static const tStringWithLength *Utils_GetMethodByIdx(
     const void *arr,
     unsigned int idx)
 {
-  const tStringWithLength(
+  const tStringWithLength (
       *methods)[] = arr;
 
   return &((*methods)[idx]);
@@ -1283,7 +1340,7 @@ static const tStringWithLength *Utils_GetResourceByIdx(
     const void *arr,
     unsigned int idx)
 {
-  const tResourceEntry(
+  const tResourceEntry (
       *resources)[] = arr;
 
   return &(((*resources)[idx]).name);
@@ -1375,7 +1432,7 @@ static int Utils_AtoiNullTerminated(
 }
 
 static void ParameterEngine_Init(
-    tParameterEntity * const pe,
+    tParameterEntity *const pe,
     char (*buffer)[],
     char *(*parameters)[][2],
     unsigned int bufferLength,
@@ -1390,7 +1447,7 @@ static void ParameterEngine_Init(
 }
 
 static tParameterEngineResult ParameterEngine_AddParameterName(
-    tParameterEntity * const pe)
+    tParameterEntity *const pe)
 {
   tParameterEngineResult result;
 
@@ -1408,7 +1465,7 @@ static tParameterEngineResult ParameterEngine_AddParameterName(
 }
 
 static tParameterEngineResult ParameterEngine_AddParameterValue(
-    tParameterEntity * const pe)
+    tParameterEntity *const pe)
 {
   tParameterEngineResult result;
 
@@ -1427,7 +1484,7 @@ static tParameterEngineResult ParameterEngine_AddParameterValue(
 }
 
 static tParameterEngineResult ParameterEngine_AddParameterCharacter(
-    tParameterEntity * const pe,
+    tParameterEntity *const pe,
     char ch)
 {
   tParameterEngineResult result;
@@ -1450,12 +1507,6 @@ static tParameterEngineResult ParameterEngine_AddParameterCharacter(
   }
 
   return result;
-}
-
-static void ContentEngine_Init(
-    tContentEntity * const contentEntity)
-{
-  contentEntity->bufferIdx = 0U;
 }
 
 static void Utils_PrintParameter(
@@ -1489,20 +1540,9 @@ static void Http_SendPortWrapper(
 
   while (length)
   {
-    if (sm->shared.content.contentEntity.bufferIdx < HTTP_BUFFER_LENGTH)
-    {
-      sm->shared.content.contentEntity.buffer[sm->shared.content.
-          contentEntity.bufferIdx] = *data;
-      ++data;
-      --length;
-      ++(sm->shared.content.contentEntity.bufferIdx);
-    }
-    else
-    {
-      sm->send(conn, sm->shared.content.contentEntity.buffer,
-          HTTP_BUFFER_LENGTH);
-      sm->shared.content.contentEntity.bufferIdx = 0U;
-    }
+    length -=
+        sm->shared.content.responseEntity.send(&(sm->shared.content.
+            responseEntity), data, length);
   }
 }
 
