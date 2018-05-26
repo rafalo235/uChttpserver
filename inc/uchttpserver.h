@@ -292,7 +292,7 @@ void Http_HelperSetResponseHeader(
     const char *name,
     const char *value);
 
-void Http_HelperSendCRLF(
+void Http_HelperSendHeader(
     tuCHttpServerState *const sm);
 
 void Http_HelperSendMessageBody(

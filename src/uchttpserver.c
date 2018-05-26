@@ -182,11 +182,19 @@ static void CompareEngine_Increment(
 static void ResponseEngine_Init(
     tResponseEntity * const re,
     void *server);
+static void ResponseEngine_SendHeader(
+    tResponseEntity * const re);
 static unsigned int ResponseEntity_SendBuffered(
     void *const ptr,
     const void *data,
     unsigned int length);
 static void ResponseEntity_FlushBuffered(
+    void *const ptr);
+static unsigned int ResponseEntity_SendChunked(
+    void *const ptr,
+    const void *data,
+    unsigned int length);
+static void ResponseEntity_FlushChunked(
     void *const ptr);
 
 static void ParameterEngine_Init(
@@ -226,6 +234,10 @@ static unsigned int Utils_SearchNullTerminatedPattern(
 
 static int Utils_AtoiNullTerminated(
     const char *str);
+static unsigned int Utils_Uitoh(
+    unsigned int num,
+    char * buffer,
+    unsigned int bufferLength);
 
 static void Utils_PrintParameter(
     void *const conn,
@@ -394,10 +406,10 @@ void Http_HelperSetResponseHeader(
   Http_SendNullTerminatedPortWrapper(sm, CRLF);
 }
 
-void Http_HelperSendCRLF(
+void Http_HelperSendHeader(
     tuCHttpServerState *const sm)
 {
-  Http_SendNullTerminatedPortWrapper(sm, CRLF);
+  ResponseEngine_SendHeader(&(sm->shared.content.responseEntity));
 }
 
 void Http_HelperSendMessageBody(
@@ -1283,6 +1295,26 @@ static void ResponseEngine_Init(
   re->bufferIdx = 0U;
 }
 
+static void ResponseEngine_SendHeader(
+    tResponseEntity * const re)
+{
+  if (TRANSFER_TYPE_DEFAULT == re->type ||
+      TRANSFER_TYPE_CHUNKED == re->type)
+  {
+    re->send(re, "Transfer-Encoding: chunked\r\n", 28);
+  }
+
+  re->send(re, CRLF, 2);
+  re->flush(re);
+
+  if (TRANSFER_TYPE_DEFAULT == re->type ||
+      TRANSFER_TYPE_CHUNKED == re->type)
+  {
+    re->send = &ResponseEntity_SendChunked;
+    re->flush = &ResponseEntity_FlushChunked;
+  }
+}
+
 static unsigned int ResponseEntity_SendBuffered(
     void *const ptr,
     const void *data,
@@ -1324,6 +1356,65 @@ static void ResponseEntity_FlushBuffered(
     server->send(re->server, re->buffer, re->bufferIdx);
     re->bufferIdx = 0U;
   }
+}
+
+static unsigned int ResponseEntity_SendChunked(
+    void *const ptr,
+    const void *data,
+    unsigned int length)
+{
+  tResponseEntity *const re = ptr;
+  tuCHttpServerState *server = re->server;
+  const char *text = data;
+  unsigned int sent = 0U;
+
+  while (length)
+  {
+    if (re->bufferIdx < HTTP_BUFFER_LENGTH)
+    {
+      re->buffer[re->bufferIdx] = *text;
+      ++text;
+      --length;
+      ++(re->bufferIdx);
+      ++sent;
+    }
+    else
+    {
+      char buf[5];
+      unsigned int len = Utils_Uitoh(HTTP_BUFFER_LENGTH, buf, 5);
+
+      server->send(re->server, buf, len);
+      server->send(re->server, CRLF, 2);
+      server->send(re->server, re->buffer, HTTP_BUFFER_LENGTH);
+      server->send(re->server, CRLF, 2);
+      re->bufferIdx = 0U;
+    }
+  }
+
+  return sent;
+}
+
+static void ResponseEntity_FlushChunked(
+    void *const ptr)
+{
+  tResponseEntity *const re = ptr;
+  tuCHttpServerState *server = re->server;
+  char buf[5];
+  unsigned int len;
+
+  if (0U < re->bufferIdx)
+  {
+    len = Utils_Uitoh(re->bufferIdx, buf, 5);
+    server->send(re->server, buf, len);
+    server->send(re->server, CRLF, 2);
+    server->send(re->server, re->buffer, re->bufferIdx);
+    server->send(re->server, CRLF, 2);
+    re->bufferIdx = 0U;
+  }
+  len = Utils_Uitoh(0U, buf, 5);
+  server->send(re->server, buf, len);
+  server->send(re->server, CRLF, 2);
+  server->send(re->server, CRLF, 2);
 }
 
 static const tStringWithLength *Utils_GetMethodByIdx(
@@ -1429,6 +1520,47 @@ static int Utils_AtoiNullTerminated(
     ++str;
   }
   return result * multiplier;
+}
+
+static unsigned int Utils_Uitoh(
+    unsigned int num,
+    char * buffer,
+    unsigned int bufferLength)
+{
+  unsigned int idx = 0U;
+
+  if (bufferLength > 0U)
+  {
+    do
+    {
+      unsigned char digit = (unsigned char) (
+          (num & (0xF0000000U)) >> 28
+          );
+
+      if (0U != digit || 0U == num)
+      {
+        if (digit <= 9U)
+        {
+          digit += 48U;
+        }
+        else
+        {
+          digit += 55U;
+        }
+        *buffer = (char) digit;
+        ++buffer;
+        --bufferLength;
+        ++idx;
+      }
+
+      num <<= 4;
+    }
+    while ((num != 0U) && (1U < bufferLength));
+
+    *buffer = '\0';
+  }
+
+  return idx;
 }
 
 static void ParameterEngine_Init(
