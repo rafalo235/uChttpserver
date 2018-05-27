@@ -1529,33 +1529,45 @@ static unsigned int Utils_Uitoh(
 {
   unsigned int idx = 0U;
 
-  if (bufferLength > 0U)
+  if (bufferLength >= 2U)
   {
-    do
+    if (0U == num)
     {
-      unsigned char digit = (unsigned char) (
-          (num & (0xF0000000U)) >> 28
-          );
-
-      if (0U != digit || 0U == num)
-      {
-        if (digit <= 9U)
-        {
-          digit += 48U;
-        }
-        else
-        {
-          digit += 55U;
-        }
-        *buffer = (char) digit;
-        ++buffer;
-        --bufferLength;
-        ++idx;
-      }
-
-      num <<= 4;
+      *buffer = '0';
+      ++buffer;
+      ++idx;
     }
-    while ((num != 0U) && (1U < bufferLength));
+    else
+    {
+      int printZero = 0;
+      unsigned char parsed = 8U;
+      do
+      {
+        unsigned char digit = (unsigned char) (
+            (num & (0xF0000000U)) >> 28
+            );
+
+        if (0U != digit || 0 != printZero)
+        {
+          printZero = 1;
+          if (digit <= 9U)
+          {
+            digit += 48U;
+          }
+          else
+          {
+            digit += 55U;
+          }
+          *buffer = (char) digit;
+          ++buffer;
+          --bufferLength;
+          ++idx;
+        }
+
+        num <<= 4;
+      }
+      while (((--parsed) != 0U) && (2U <= bufferLength));
+    }
 
     *buffer = '\0';
   }
