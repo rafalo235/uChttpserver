@@ -1221,6 +1221,7 @@ static tSearchEngineResult SearchEngine_Search(
         }
         else
         {
+          se->compareIdx = 0u;
           if (1 == SearchEngine_Finished(se))
           {
             result = SEARCH_ENGINE_NOT_FOUND;
