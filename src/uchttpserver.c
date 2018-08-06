@@ -854,9 +854,13 @@ static unsigned int ParseParameterNameState(
   }
   else
   {
+#if HTTP_ERROR_ON_TOO_MANY_PARAMETERS
     tParameterEngineResult paramResult =
-        ParameterEngine_AddParameterCharacter(&(sm->shared.
+#endif
+    ParameterEngine_AddParameterCharacter(&(sm->shared.
             parse.parameterEntity), *data);
+
+#if HTTP_ERROR_ON_TOO_MANY_PARAMETERS
     if (PARAMETER_ENGINE_OK == paramResult)
     {
       parsed = 1U;
@@ -869,6 +873,9 @@ static unsigned int ParseParameterNameState(
       Utils_MarkError(conn, info);
       parsed = 0U;
     }
+#else
+    parsed = 1U;
+#endif
   }
 
   return parsed;
@@ -913,9 +920,12 @@ static unsigned int ParseParameterValueState(
     }
     else
     {
+#if HTTP_ERROR_ON_TOO_MANY_PARAMETERS
       tParameterEngineResult paramResult =
-          ParameterEngine_AddParameterCharacter(&(sm->shared.
+#endif
+      ParameterEngine_AddParameterCharacter(&(sm->shared.
               parse.parameterEntity), *data);
+#if HTTP_ERROR_ON_TOO_MANY_PARAMETERS
       if (PARAMETER_ENGINE_OK == paramResult)
       {
         parsed = 1U;
@@ -928,6 +938,9 @@ static unsigned int ParseParameterValueState(
         Utils_MarkError(conn, info);
         parsed = 0U;
       }
+#else
+      parsed = 1u;
+#endif
     }
   }
 

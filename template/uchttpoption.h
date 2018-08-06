@@ -46,4 +46,8 @@
 #define HTTP_PARAMETERS_MAX (16)
 #endif
 
+#ifndef HTTP_ERROR_ON_TOO_MANY_PARAMETERS
+#define HTTP_ERROR_ON_TOO_MANY_PARAMETERS (0)
+#endif
+
 #endif /* UCHTTPOPTION_H_ */
